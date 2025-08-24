@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tony Chatbot - Voice-Enabled Healthcare Chatbot</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0e1957; }
+        #chat-container { background-color: #ffffff; }
+        #chat-window { height: calc(100vh - 230px); }
+        .bot-message { background-color: #f8fafc; color: #334155; align-self: flex-start; border-radius: 1rem 1rem 1rem 0.25rem; box-shadow: 0 1px 3px 0 rgba(0,0,0,0.07), 0 1px 2px 0 rgba(0,0,0,0.05); }
+        .user-message { background-color: #0e1957; color: #ffffff; align-self: flex-end; border-radius: 1rem 1rem 0.25rem 1rem; box-shadow: 0 1px 3px 0 rgba(0,0,0,0.07), 0 1px 2px 0 rgba(0,0,0,0.05); }
+        .disclaimer { background-color: #fefce8; border-left: 4px solid #c3a359; color: #c3a359; }
+        .emergency { background-color: #fef2f2; border-left: 4px solid #ef4444; color: #b91c1c; }
+        .quick-reply-btn { background-color: #ffffff; border: 1px solid #c3a359; color: #0e1957; transition: all 0.2s ease-in-out; }
+        .quick-reply-btn:hover { background-color: #c3a359; color: #ffffff; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .typing-indicator { display: flex; align-items: center; padding: 1rem; background-color: #f8fafc; }
+        .typing-indicator span { height: 10px; width: 10px; margin: 0 2px; background-color: #94a3b8; border-radius: 50%; display: inline-block; animation: bounce 1.4s infinite ease-in-out both; }
+        .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+        .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1.0); } }
+        .bot-message ul { list-style-type: disc; padding-left: 20px; margin-top: 8px; }
+        .bot-message li { margin-bottom: 4px; }
+        .voice-btn { cursor: pointer; color: #94a3b8; transition: all 0.2s ease-in-out; border-radius: 9999px; }
+        .voice-btn:hover { color: #c3a359; background-color: #f1f5f9; transform: scale(1.1); }
+        #mic-btn.listening { color: #ef4444; }
+    </style>
+</head>
+<body class="bg-slate-300 flex items-center justify-center min-h-screen">
+    <div id="chat-container" class="w-full max-w-2xl mx-4 bg-white rounded-2xl shadow-2xl flex flex-col">
+        <header class="bg-[#0e1957] text-white p-5 rounded-t-2xl shadow-lg flex items-center justify-between">
+            <div class="flex items-center">
+                <div class="w-10 h-10 mr-4 bg-[#c3a359] rounded-full flex items-center justify-center shadow">
+                    <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0L8 5.55H6.5a2.5 2.5 0 00-2.5 2.5v4a2.5 2.5 0 002.5 2.5h7a2.5 2.5 0 002.5-2.5v-4a2.5 2.5 0 00-2.5-2.5H12L11.49 3.17zM7.5 9.5a1 1 0 100-2 1 1 0 000 2zm5-1a1 1 0 11-2 0 1 1 0 012 0z" clip-rule="evenodd"></path></svg>
+                </div>
+                <h1 id="chatbot-title" class="text-2xl font-bold tracking-wide">Tony Chatbot</h1>
+            </div>
+            <div class="flex items-center space-x-2">
+                <div class="flex items-center text-white bg-black/10 rounded-full p-1 space-x-1">
+                    <button id="decrease-text-btn" title="Decrease text size" class="p-1 rounded-full hover:bg-white/20 transition"><span class="text-xs font-semibold px-1">A-</span></button>
+                    <button id="increase-text-btn" title="Increase text size" class="p-1 rounded-full hover:bg-white/20 transition"><span class="text-xs font-semibold px-1">A+</span></button>
+                </div>
+                <button id="restart-btn" title="Restart Chat" class="p-2 rounded-full hover:bg-white/20 transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="currentColor" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2z"/><path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466"/></svg>
+                </button>
+            </div>
+        </header>
+        <div id="chat-window" class="flex-1 p-6 overflow-y-auto">
+            <div id="chat-messages" class="flex flex-col space-y-4" aria-live="polite"></div>
+        </div>
+        <div id="quick-replies" class="p-4 border-t border-gray-200 flex flex-wrap gap-2 justify-center"></div>
+        <footer class="p-4 border-t border-gray-200 bg-white rounded-b-2xl">
+            <div class="flex items-center space-x-3">
+                <input type="text" id="user-input" placeholder="Type or press the mic to talk..." class="flex-1 px-5 py-3 bg-slate-100 border border-slate-200 rounded-full focus:outline-none focus:ring-2 focus:ring-[#c3a359] transition">
+                <button id="mic-btn" aria-label="Use microphone" class="text-slate-400 hover:text-[#c3a359] focus:outline-none focus:ring-2 focus:ring-[#c3a359] rounded-full p-3 transition">
+                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 16 16"><path d="M3.5 6.5A.5.5 0 0 1 4 7v1a4 4 0 0 0 8 0V7a.5.5 0 0 1 1 0v1a5 5 0 0 1-4.5 4.975V15h3a.5.5 0 0 1 0 1h-7a.5.5 0 0 1 0-1h3v-2.025A5 5 0 0 1 3 8V7a.5.5 0 0 1 .5-.5z"/><path d="M10 8a2 2 0 1 1-4 0V3a2 2 0 1 1 4 0v5zM8 0a3 3 0 0 0-3 3v5a3 3 0 0 0 6 0V3a3 3 0 0 0-3-3z"/></svg>
+                </button>
+                <button id="send-btn" aria-label="Send message" class="bg-[#c3a359] text-white rounded-full p-3 hover:bg-[#b5944a] focus:outline-none focus:ring-2 focus:ring-[#c3a359] focus:ring-offset-2 transition transform hover:scale-110">
+                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg"><path d="M15.854.146a.5.5 0 0 1 .11.54l-5.819 14.547a.75.75 0 0 1-1.329.124l-3.178-4.995L.643 7.184a.75.75 0 0 1 .124-1.33L15.314.037a.5.5 0 0 1 .54.11ZM6.636 10.07l2.761 4.338L14.13 2.576 6.636 10.07Zm6.787-8.201L1.591 6.602l4.339 2.76 7.494-7.493Z"/></svg>
+                </button>
+            </div>
+        </footer>
+    </div>
+
+    <script>
+        const chatMessages = document.getElementById('chat-messages');
+        const userInput = document.getElementById('user-input');
+        const sendBtn = document.getElementById('send-btn');
+        const restartBtn = document.getElementById('restart-btn');
+        const quickRepliesContainer = document.getElementById('quick-replies');
+        const chatbotTitle = document.getElementById('chatbot-title');
+        const micBtn = document.getElementById('mic-btn');
+        const decreaseTextBtn = document.getElementById('decrease-text-btn');
+        const increaseTextBtn = document.getElementById('increase-text-btn');
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = SpeechRecognition ? new SpeechRecognition() : null;
+        
+        const languages = {
+            en: {
+                chatbotName: "Tony Chatbot",
+                greeting: "Hello! I'm Tony Chatbot, your virtual assistant.",
+                disclaimer: "<b>Important Disclaimer:</b> I am a virtual assistant and not a substitute for a human medical professional. I cannot provide medical advice or diagnosis. <b>For any medical emergency, please call 10177 immediately.</b><br><br>By using this chat, you acknowledge our privacy notice regarding data collection for operational purposes.",
+                howCanIHelp: "How can I help you today?",
+                misunderstood: "I'm sorry, I can't help with that. You can ask me to <b>schedule an appointment</b>, <b>refill a prescription</b>, or ask about topics like <b>visiting hours</b> and <b>parking</b>.",
+                scheduleAppointment: "Schedule Appointment",
+                refillPrescription: "Refill Prescription",
+                generalInfo: "General Info",
+                homeCareInfo: "Home Care Info",
+                emergencyServices: "Emergency Services",
+                visitingHours: "Visiting Hours",
+                contactInfo: "Contact Information",
+                location: "Location",
+                departments: "Departments",
+                ambulance: "Ambulance",
+                police: "Police",
+                fireDepartment: "Fire Department",
+                traumaUnits: "24-Hour Trauma Units",
+                mainMenu: "Main Menu",
+                startAppointment: "Of course. I can help you schedule an appointment. What is the full name of the patient?",
+                askReason: "Thank you. What is the reason for your visit? (e.g., General Check-up, Flu Symptoms)",
+                askDateTime: "Got it. What is your preferred date and time for the appointment? (e.g., August 24th, 2025, around 10:00 AM)",
+                askContact: "Great. What is a good contact number for us to reach you? (e.g., +27 82 123 4567)",
+                askMedicalAid: "Thank you. Lastly, could you please provide your medical aid provider and membership number? (e.g., Discovery, 123456789). If you don't have one, you can just say 'None'.",
+                confirmAppointment: (data) => `Thank you, ${data.name}. We have submitted your appointment request with the following details:<br><br><b>Reason:</b> ${data.reason}<br><b>Preferred Time:</b> ${data.dateTime}<br><b>Contact:</b> ${data.contact}<br><b>Medical Aid:</b> ${data.medicalAid}<br><br>You will receive a confirmation call from our staff shortly.`,
+                preVisitPrompt: "To help you prepare, would you like a quick pre-visit checklist?",
+                preVisitChecklist: `<b>Pre-visit Checklist:</b><br><ul><li>Please bring your <b>ID document</b>, hospital/clinic card, and any referral letters.</li><li>Parking can be limited, so please allow extra time or consider using public transport.</li><li>Wait times can vary. We appreciate your patience.</li></ul>`,
+                startRefill: "I can assist with your prescription refill request. What is the name of the medication?",
+                askDosage: "Thank you. What is the dosage? (e.g., 50mg)",
+                askPatientName: "Please provide the patient's full name for verification.",
+                askRefillContact: "Got it. What is a good contact number for this refill? (e.g., +27 82 123 4567)",
+                askPickup: "Thank you. Where would you like to pick up your prescription?",
+                confirmRefill: (data) => `Thank you. Your request to refill ${data.medication} (${data.dosage}) for ${data.patientId} has been sent to the pharmacy. You will be notified at ${data.contact} when it is ready for pickup at <b>${data.pickupLocation}</b>.`,
+                departmentIntro: "I can help with that. Please choose a department to learn more about what they cover:",
+                departmentSelected: (dept) => `Thank you for selecting ${dept}. For appointments related to this department, please use the "Schedule Appointment" option.`,
+                generalInfoPrompt: "I can provide information on the following topics. Please select one:",
+                homeCareDisclaimer: "<b>VERY IMPORTANT:</b> The following information is for general knowledge and home care for minor issues only. It is <b>NOT</b> medical advice. If you are worried about your symptoms, or if they get worse, please see a doctor or visit a clinic.",
+                homeCarePrompt: "What seems to be the problem? You can tell me about things like a cold, a minor cut, or a headache.",
+                homeCareFallback: "I'm sorry, I can't provide information on that. I can help with the following topics:",
+                emergency: (loc) => `<b>This appears to be a medical emergency. Please call 10177 immediately.</b><br><br>Do not rely on this chat for help. Here are some nearby hospitals:<br>${loc}`,
+                emergencyDisclaimer: "<b>For any emergency, call 10177 immediately.</b> This service CANNOT dispatch emergency responders. Here is some important contact information:",
+                ambulanceInfo: "For a national ambulance, call <b>10177</b>.",
+                policeInfo: "For the South African Police Service (SAPS), call <b>10111</b>.",
+                fireInfo: "For the Fire Department, call <b>107</b> from a landline or <b>021 480 7700</b> from a cell phone.",
+                traumaInfo: "The following hospitals have 24-hour trauma units: <b>Groote Schuur, Tygerberg, New Somerset, Mitchells Plain, and Khayelitsha.</b>",
+                noMedicalAdvice: "I am a virtual assistant and cannot provide medical advice. Please consult with a qualified healthcare professional for any health concerns.",
+                endConversation: "You're welcome! Feel free to ask if anything else comes up. The main menu is available below if you need it.",
+                homeCareFollowUp: "I can provide information on other home care topics, or we can return to the main menu.",
+                genericError: "I'm having some trouble right now. Please try again in a moment.",
+                chooseLanguagePrompt: "Please choose a language from the options provided.",
+                yesPlease: "Yes, please",
+                noThanks: "No, thanks",
+                departmentsData: { "Cardiology": "For issues related to the heart and blood vessels, like chest pain or high blood pressure.", "Pediatrics": "Specialized care for infants, children, and adolescents.", "Orthopedics": "For injuries and conditions related to bones, joints, ligaments, and muscles.", "General Medicine": "For diagnosis and treatment of a wide range of common adult illnesses.", "Emergency": "For urgent, life-threatening injuries and illnesses. Please call 10177 for emergencies." },
+                homeCareData: {
+                    "Common Cold": { keywords: ["cold", "flu", "runny nose", "sneeze"], symptoms: "<b>Common Symptoms:</b> Runny or stuffy nose, sore throat, cough, sneezing, mild headache or body aches.", homeCare: "<b>Home Care Suggestions:</b> Get plenty of rest, drink lots of fluids (water, juice, warm broth), and use a saline nasal spray to relieve congestion. You can speak to a pharmacist about over-the-counter pain relievers or cold remedies.", whenToSeeDoctor: "<b>When to See a Doctor:</b> If you have a fever over 38.5°C, symptoms that last more than 10 days, or difficulty breathing." },
+                    "Minor Cuts & Scrapes": { keywords: ["cut", "scrape", "graze", "wound", "bleed"], symptoms: "<b>Signs:</b> A break in the skin, minor bleeding, some pain or stinging.", homeCare: "<b>Home Care Suggestions:</b> Wash your hands first. Gently clean the area with cool water and mild soap. Apply a thin layer of antiseptic ointment and cover with a clean bandage. Change the bandage daily.", whenToSeeDoctor: "<b>When to See a Doctor:</b> If the cut is deep, won't stop bleeding, shows signs of infection (redness, swelling, pus), or was caused by a dirty or rusty object." },
+                    "Mild Headache": { keywords: ["headache", "sore head", "migraine"], symptoms: "<b>Common Symptoms:</b> A dull, aching pain in the head, pressure across the forehead or on the sides/back of the head.", homeCare: "<b>Home Care Suggestions:</b> Rest in a quiet, dark room. Apply a cool cloth to your forehead. Ensure you are hydrated. A pharmacist can advise on over-the-counter pain relievers like paracetamol.", whenToSeeDoctor: "<b>When to See a Doctor:</b> If the headache is sudden and severe, comes with a fever, stiff neck, confusion, or follows a head injury." },
+                    "Minor Burn": { keywords: ["burn", "scald"], symptoms: "<b>Signs:</b> Redness, minor swelling, and pain (similar to sunburn).", homeCare: "<b>Home Care Suggestions:</b> Immediately cool the burn under cool (not cold) running water for about 10 minutes. Cover loosely with a sterile gauze bandage. You can take an over-the-counter pain reliever.", whenToSeeDoctor: "<b>When to See a Doctor:</b> If the burn is larger than your palm, is on the face, hands, or joints, is blistering, or was caused by chemicals or electricity." },
+                    "Insect Bite or Sting": { keywords: ["insect", "bite", "sting", "bee", "wasp", "mosquito"], symptoms: "<b>Common Symptoms:</b> A red, swollen lump on the skin, itchiness, and minor pain.", homeCare: "<b>Home Care Suggestions:</b> If stung, remove the stinger by scraping it off. Wash the area with soap and water. Apply a cold pack to reduce swelling and itching. An antihistamine cream can help with the itch.", whenToSeeDoctor: "<b>When to See a Doctor:</b> If you have a severe reaction, such as difficulty breathing, swelling of the face or mouth, dizziness, or a rash that spreads. This could be an allergic reaction." },
+                    "Minor Sprain": { keywords: ["sprain", "twisted", "ankle", "wrist", "pulled muscle"], symptoms: "<b>Signs:</b> Pain, swelling, bruising, and limited ability to move the affected joint.", homeCare: "<b>Home Care Suggestions:</b> Follow the R.I.C.E. principle: <b>R</b>est the joint, <b>I</b>ce the area for 15-20 minutes every few hours, <b>C</b>ompress with an elastic bandage, and <b>E</b>levate the injured limb above your heart.", whenToSeeDoctor: "<b>When to See a Doctor:</b> If you cannot put weight on the joint, the pain is severe, or if you heard a 'popping' sound at the time of injury." },
+                    "Diarrhea & Vomiting": { keywords: ["diarrhea", "vomiting", "gastro", "stomach bug", "running stomach", "tummy bug"], symptoms: "<b>Common Symptoms:</b> Loose, watery stools, nausea, vomiting, and stomach cramps.", homeCare: "<b>Home Care Suggestions:</b> Stay hydrated by sipping small amounts of clear fluids (water, rehydration solutions, weak tea). Avoid solid food until vomiting stops, then reintroduce bland foods like toast, rice, or bananas. Get plenty of rest.", whenToSeeDoctor: "<b>When to See a Doctor:</b> If there are signs of dehydration (little to no urination, very dry mouth), a high fever, severe abdominal pain, or if symptoms persist for more than 2 days." },
+                    "Sunburn": { keywords: ["sunburn", "burnt skin"], symptoms: "<b>Signs:</b> Red, painful skin that feels hot to the touch. In severe cases, swelling and blisters may occur.", homeCare: "<b>Home Care Suggestions:</b> Cool the skin with a cool bath or shower. Apply after-sun lotion or aloe vera gel. Drink extra water to prevent dehydration. A pharmacist can recommend over-the-counter pain relievers.", whenToSeeDoctor: "<b>When to See a Doctor:</b> If the sunburn is severe with extensive blistering, or if you experience fever, chills, or confusion." },
+                    "Nosebleed": { keywords: ["nosebleed", "bleeding nose"], symptoms: "<b>Signs:</b> Blood dripping or flowing from the nostril.", homeCare: "<b>Home Care Suggestions:</b> Sit upright and lean forward slightly. Pinch the soft part of your nose, just below the bony bridge, for 10-15 minutes continuously. Breathe through your mouth. An ice pack on the bridge of the nose can also help.", whenToSeeDoctor: "<b>When to See a Doctor:</b> If the bleeding is heavy, lasts longer than 20 minutes, or was caused by a significant injury to the head." },
+                    "Fever": { keywords: ["fever", "high temperature"], symptoms: "<b>Signs:</b> A body temperature above 38°C, sweating, chills, headache, and muscle aches.", homeCare: "<b>Home Care Suggestions:</b> Rest and drink plenty of fluids. Wear light clothing. A pharmacist can advise on fever-reducing medication like paracetamol.", whenToSeeDoctor: "<b>When to See a Doctor:</b> For an adult, if the fever is above 40°C or accompanied by a severe headache, stiff neck, rash, or confusion. For children, consult a doctor or clinic based on age and other symptoms." },
+                    "Pink Eye (Conjunctivitis)": { keywords: ["pink eye", "conjunctivitis", "sore eye", "red eye"], symptoms: "<b>Common Symptoms:</b> Redness in the white of the eye, itchiness, a gritty feeling, and sometimes a discharge that forms a crust.", homeCare: "<b>Home Care Suggestions:</b> Use a clean, wet cloth to wipe away any discharge. Apply a cool compress. Avoid touching your eyes and wash your hands frequently. Do not share towels. Most mild cases clear up on their own.", whenToSeeDoctor: "<b>When to See a Doctor:</b> If there is significant pain, changes in vision, intense redness, or if your immune system is weakened." },
+                    "Allergies (Hay Fever)": { keywords: ["allergies", "hay fever", "itchy eyes"], symptoms: "<b>Common Symptoms:</b> Sneezing, coughing, a runny or blocked nose, and itchy, red or watery eyes.", homeCare: "<b>Home Care Suggestions:</b> Try to stay indoors on high-pollen days. Keep windows closed. A pharmacist can recommend antihistamine tablets, eye drops, or nasal sprays to help manage symptoms.", whenToSeeDoctor: "<b>When to See a Doctor:</b> If over-the-counter treatments aren't effective, or if your symptoms are severe and impacting your daily life." },
+                    "Constipation": { keywords: ["constipation", "blocked", "can't go to the toilet"], symptoms: "<b>Signs:</b> Difficulty passing stools, passing stools less often than usual, stomach ache or cramps.", homeCare: "<b>Home Care Suggestions:</b> Gradually increase your fibre intake (fruits, vegetables, whole grains). Drink plenty of water throughout the day. Regular gentle exercise, like walking, can also help.", whenToSeeDoctor: "<b>When to See a Doctor:</b> If there is blood in your stool, severe pain, unexplained weight loss, or if the problem persists for more than 2 weeks." },
+                    "Earache": { keywords: ["earache", "sore ear", "ear pain"], symptoms: "<b>Common Symptoms:</b> A sharp, dull, or burning pain in one or both ears. It can be constant or come and go.", homeCare: "<b>Home Care Suggestions:</b> Apply a warm cloth to the affected ear. A pharmacist can advise on over-the-counter pain relievers. Avoid putting anything inside your ear canal.", whenToSeeDoctor: "<b>When to See a Doctor:</b> If the pain is severe, there is fluid draining from the ear, you have a high fever, or if symptoms don't improve in a couple of days." },
+                    "Stomach Cramps": { keywords: ["stomach cramps", "sore tummy", "stomach ache"], symptoms: "<b>Common Symptoms:</b> A dull or sharp pain in the abdomen.", homeCare: "<b>Home Care Suggestions:</b> Rest and drink clear fluids. A hot water bottle or warm bath may help ease the pain. Avoid rich, fatty, or spicy foods. Peppermint tea can sometimes be soothing.", whenToSeeDoctor: "<b>When to See a Doctor:</b> If the pain is severe, persistent, or accompanied by fever, vomiting, or blood in your stool." },
+                    "Muscle Cramps": { keywords: ["muscle cramp", "charley horse", "muscle spasm"], symptoms: "<b>Signs:</b> A sudden and involuntary contraction of one or more of your muscles, often causing sharp pain.", homeCare: "<b>Home Care Suggestions:</b> Gently stretch and massage the cramping muscle. Apply a warm towel or heating pad. Ensure you are well-hydrated, especially if you've been exercising.", whenToSeeDoctor: "<b>When to See a Doctor:</b> If cramps are severe, happen frequently, are not related to obvious causes like exercise, or are accompanied by swelling or redness." },
+                    "Athlete's Foot": { keywords: ["athlete's foot", "tinea pedis", "itchy feet"], symptoms: "<b>Signs:</b> A scaly, itchy rash that usually starts between the toes. It can cause stinging, burning, and cracked skin.", homeCare: "<b>Home Care Suggestions:</b> Keep your feet clean and dry, especially between the toes. Change your socks regularly. A pharmacist can provide over-the-counter antifungal creams, sprays, or powders.", whenToSeeDoctor: "<b>When to See a Doctor:</b> If the rash is severe, doesn't improve with home treatment, or if you have diabetes and suspect you have athlete's foot." },
+                    "Sore Throat": { keywords: ["sore throat", "scratchy throat"], symptoms: "<b>Common Symptoms:</b> Pain or a scratchy sensation in the throat, pain that worsens with swallowing or talking, difficulty swallowing.", homeCare: "<b>Home Care Suggestions:</b> Gargle with warm salt water. Drink warm liquids like tea with honey. Use over-the-counter lozenges. Rest your voice.", whenToSeeDoctor: "<b>When to See a Doctor:</b> If you have difficulty breathing, a high fever, a rash, or if the sore throat is severe and lasts longer than a week." },
+                    "Cough": { keywords: ["cough", "tickle in throat"], symptoms: "<b>Common Symptoms:</b> A dry or productive (with phlegm) cough.", homeCare: "<b>Home Care Suggestions:</b> Stay hydrated. Use a humidifier or take a steamy shower. Honey can help soothe a cough (do not give to children under 1).", whenToSeeDoctor: "<b>When to See a Doctor:</b> If the cough is severe, accompanied by wheezing or shortness of breath, produces bloody mucus, or lasts for several weeks." },
+                    "Blocked Nose": { keywords: ["blocked nose", "stuffy nose", "sinus congestion"], symptoms: "<b>Common Symptoms:</b> Difficulty breathing through your nose, facial pressure or pain, thick nasal discharge.", homeCare: "<b>Home Care Suggestions:</b> Use a saline nasal spray or rinse. Inhale steam from a bowl of hot water. Apply a warm, wet towel to your face.", whenToSeeDoctor: "<b>When to See a Doctor:</b> If you have severe headache or facial pain, a high fever, or symptoms that don't improve after 10 days." },
+                    "Minor Skin Rash": { keywords: ["rash", "itchy skin", "hives"], symptoms: "<b>Common Symptoms:</b> Red, itchy, or bumpy skin.", homeCare: "<b>Home Care Suggestions:</b> Avoid scratching. Apply a cool, wet cloth or an over-the-counter hydrocortisone cream. Take a cool bath with baking soda or oatmeal.", whenToSeeDoctor: "<b>When to See a Doctor:</b> If the rash covers your whole body, is accompanied by a fever, is painful, or shows signs of infection like swelling or pus." },
+                    "Heartburn": { keywords: ["heartburn", "indigestion", "acid reflux"], symptoms: "<b>Common Symptoms:</b> A burning pain in your chest, usually after eating, which might be worse at night.", homeCare: "<b>Home Care Suggestions:</b> Avoid trigger foods (spicy, fatty foods, caffeine). Don't lie down immediately after eating. A pharmacist can recommend over-the-counter antacids.", whenToSeeDoctor: "<b>When to See a Doctor:</b> If you have severe chest pain or pressure, especially if combined with pain in the arm or jaw, or shortness of breath. See a doctor if heartburn occurs more than twice a week." }
+                },
+                generalConversationData: { visitingHours: { keywords: ["visiting hours", "visit", "when can i visit", "when are you open"], response: "Visiting hours for our Cape Town hospitals are:<ul><li><b>Groote Schuur, Tygerberg, New Somerset, Victoria, Mitchells Plain & Khayelitsha:</b> 15:00 - 16:00 & 19:00 - 20:00 daily.</li><li><b>Red Cross Children's Hospital:</b> Visiting is generally open for parents, but it's best to confirm with the specific ward.</li></ul><i>Please note that hours can change. It's always a good idea to call the hospital to confirm.</i>" }, contactInfo: { keywords: ["contact", "phone number", "call", "number", "who do i call"], response: "Here are the main contact numbers for our Cape Town hospitals:<ul><li><b>Groote Schuur:</b> 021 404 9111</li><li><b>Tygerberg:</b> 021 938 4911</li><li><b>Red Cross Children's:</b> 021 658 5111</li><li><b>New Somerset:</b> 021 402 6911</li><li><b>Mitchells Plain:</b> 021 377 4300</li><li><b>Khayelitsha:</b> 021 360 4200</li><li><b>Victoria Hospital:</b> 021 799 1111</li></ul>" }, location: { keywords: ["location", "address", "where is", "get there"], response: "Here are the addresses for major public hospitals in Cape Town:<ul><li><b>Groote Schuur Hospital:</b> Main Road, Observatory</li><li><b>Tygerberg Hospital:</b> Francie van Zijl Avenue, Tygerberg</li><li><b>Red Cross War Memorial Children's Hospital:</b> Klipfontein Road, Rondebosch</li><li><b>New Somerset Hospital:</b> Portswood Road, Green Point</li><li><b>Mitchells Plain Hospital:</b> 8 AZ Berman Drive, Lentegeur</li><li><b>Khayelitsha Hospital:</b> C/o Steve Biko & Walter Sisulu Drives, Khayelitsha</li><li><b>Victoria Hospital:</b> Alphen Hill Road, Wynberg</li></ul>" } }
+            },
+            af: {
+                chatbotName: "Tony Kletsbot",
+                greeting: "Hallo! Ek is Tony Kletsbot, jou virtuele assistent.",
+                disclaimer: "<b>Belangrike Vrywaring:</b> Ek is 'n virtuele assistent en nie 'n plaasvervanger vir 'n menslike mediese beroepspersoon nie. Ek kan nie mediese advies of diagnose verskaf nie. <b>Vir enige mediese noodgeval, skakel asseblief 10177 onmiddellik.</b><br><br>Deur hierdie klets te gebruik, erken u ons privaatheidskennisgewing rakende data-insameling vir operasionele doeleindes.",
+                howCanIHelp: "Hoe kan ek jou vandag help?",
+                misunderstood: "Jammer, ek kan nie daarmee help nie. Jy kan my vra om 'n <b>afspraak te skeduleer</b>, 'n <b>voorskrif te hernu</b>, of vra oor onderwerpe soos <b>besoekure</b> en <b>parkering</b>.",
+                scheduleAppointment: "Beplan Afspraak",
+                refillPrescription: "Hernu Voorskrif",
+                generalInfo: "Algemene Inligting",
+                homeCareInfo: "Tuisversorging Inligting",
+                emergencyServices: "Nooddienste",
+                visitingHours: "Besoekure",
+                contactInfo: "Kontakinligting",
+                location: "Ligging",
+                departments: "Departemente",
+                ambulance: "Ambulans",
+                police: "Polisie",
+                fireDepartment: "Brandweer",
+                traumaUnits: "24-Uur Trauma-eenhede",
+                mainMenu: "Hoofkieslys",
+                startAppointment: "Natuurlik. Ek kan help om 'n afspraak te beplan. Wat is die pasiënt se volle naam?",
+                askReason: "Dankie. Wat is die rede vir die besoek? (bv. Algemene Ondersoek, Griepsimptome)",
+                askDateTime: "Reg so. Wat is jou voorkeurdatum en -tyd vir die afspraak? (bv. 24 Augustus 2025, omstreeks 10:00 VM)",
+                askContact: "Uitstekend. Wat is 'n goeie kontaknommer om jou te bereik? (bv. +27 82 123 4567)",
+                askMedicalAid: "Dankie. Laastens, kan jy asseblief jou mediese fondsverskaffer en lidmaatskapnommer gee? (bv. Discovery, 123456789). As jy nie een het nie, sê net 'Geen'.",
+                confirmAppointment: (data) => `Dankie, ${data.name}. Ons het jou afspraakversoek met die volgende besonderhede ingedien:<br><br><b>Rede:</b> ${data.reason}<br><b>Voorkeurtyd:</b> ${data.dateTime}<br><b>Kontak:</b> ${data.contact}<br><b>Mediese Fonds:</b> ${data.medicalAid}<br><br>Jy sal binnekort 'n bevestigingsoproep van ons personeel ontvang.`,
+                preVisitPrompt: "Om jou te help voorberei, wil jy 'n vinnige voorbesoek-kontrolelys hê?",
+                preVisitChecklist: `<b>Voorbesoek-kontrolelys:</b><br><ul><li>Bring asseblief jou <b>ID-dokument</b>, hospitaal-/kliniekkaart, en enige verwysingsbriewe saam.</li><li>Parkering kan beperk wees, so laat asseblief ekstra tyd toe of oorweeg openbare vervoer.</li><li>Wagtye kan wissel. Ons waardeer jou geduld.</li></ul>`,
+                startRefill: "Ek kan help met jou voorskrifhernuwingsversoek. Wat is die naam van die medikasie?",
+                askDosage: "Dankie. Wat is die dosis? (bv. 50mg)",
+                askPatientName: "Verskaf asseblief die pasiënt se volle naam vir verifikasie.",
+                askRefillContact: "Reg so. Wat is 'n goeie kontaknommer vir hierdie hernuwing? (bv. +27 82 123 4567)",
+                askPickup: "Dankie. Waar wil jy jou voorskrif optel?",
+                confirmRefill: (data) => `Dankie. Jou versoek om ${data.medication} (${data.dosage}) vir ${data.patientId} te hernu, is na die apteek gestuur. Jy sal by ${data.contact} in kennis gestel word wanneer dit gereed is vir optel by <b>${data.pickupLocation}</b>.`,
+                departmentIntro: "Ek kan daarmee help. Kies asseblief 'n departement om meer te leer oor wat hulle dek:",
+                departmentSelected: (dept) => `Dankie dat jy ${dept} gekies het. Vir afsprake wat met hierdie departement verband hou, gebruik asseblief die "Beplan Afspraak" opsie.`,
+                generalInfoPrompt: "Ek kan inligting oor die volgende onderwerpe verskaf. Kies asseblief een:",
+                homeCareDisclaimer: "<b>BAIE BELANGRIK:</b> Die volgende inligting is slegs vir algemene kennis en tuisversorging vir geringe kwessies. Dit is <b>NIE</b> mediese advies nie. As jy bekommerd is oor jou simptome, of as dit vererger, sien asseblief 'n dokter of besoek 'n kliniek.",
+                homeCarePrompt: "Wat lyk die probleem te wees? Jy kan my vertel van dinge soos 'n verkoue, 'n klein snytjie, of hoofpyn.",
+                homeCareFallback: "Jammer, ek kan nie inligting daaroor verskaf nie. Ek kan help met die volgende onderwerpe:",
+                emergency: (loc) => `<b>Dit lyk na 'n mediese noodgeval. Skakel asseblief 10177 onmiddellik.</b><br><br>Moenie op hierdie klets staatmaak vir hulp nie. Hier is 'n paar nabygeleë hospitale:<br>${loc}`,
+                emergencyDisclaimer: "<b>Vir enige noodgeval, skakel 10177 onmiddellik.</b> Hierdie diens KAN NIE noodpersoneel uitstuur nie. Hier is belangrike kontakinligting:",
+                ambulanceInfo: "Vir 'n nasionale ambulans, skakel <b>10177</b>.",
+                policeInfo: "Vir die Suid-Afrikaanse Polisiediens (SAPD), skakel <b>10111</b>.",
+                fireInfo: "Vir die Brandweer, skakel <b>107</b> vanaf 'n landlyn of <b>021 480 7700</b> vanaf 'n selfoon.",
+                traumaInfo: "Die volgende hospitale het 24-uur trauma-eenhede: <b>Groote Schuur, Tygerberg, New Somerset, Mitchells Plain, en Khayelitsha.</b>",
+                noMedicalAdvice: "Ek is 'n virtuele assistent en kan nie mediese advies gee nie. Raadpleeg asseblief 'n gekwalifiseerde gesondheidswerker vir enige gesondheidskwessies.",
+                endConversation: "Dis 'n plesier! Vra gerus as enigiets anders opduik. Die hoofkieslys is hieronder beskikbaar as jy dit nodig het.",
+                homeCareFollowUp: "Ek kan inligting oor ander tuisversorgingsonderwerpe verskaf, of ons kan terugkeer na die hoofkieslys.",
+                genericError: "Ek ondervind tans probleme. Probeer asseblief 'n oomblik later weer.",
+                chooseLanguagePrompt: "Kies asseblief 'n taal uit die opsies wat verskaf word.",
+                yesPlease: "Ja, asseblief",
+                noThanks: "Nee, dankie",
+                departmentsData: { "Kardiologie": "Vir probleme wat verband hou met die hart en bloedvate, soos borspyn of hoë bloeddruk.", "Pediatrie": "Gespesialiseerde sorg vir babas, kinders en adolessente.", "Ortopedie": "Vir beserings en toestande wat verband hou met bene, gewrigte, ligamente en spiere.", "Algemene Geneeskunde": "Vir die diagnose en behandeling van 'n wye verskeidenheid algemene volwasse siektes.", "Noodgevalle": "Vir dringende, lewensgevaarlike beserings en siektes. Skakel asseblief 10177 vir noodgevalle." },
+                homeCareData: {
+                    "Verkoue": { keywords: ["verkoue", "griep", "loopneus", "nies"], symptoms: "<b>Algemene Simptome:</b> Loopneus of toe neus, seer keel, hoes, nies, ligte hoofpyn of lyfseer.", homeCare: "<b>Tuisversorging Voorstelle:</b> Rus baie, drink baie vloeistowwe (water, sap, warm sop), en gebruik 'n soutneussproei om opeenhoping te verlig. Jy kan met 'n apteker praat oor pynstillers of verkouemiddels wat sonder voorskrif beskikbaar is.", whenToSeeDoctor: "<b>Wanneer om 'n Dokter te Sien:</b> As jy 'n koors bo 38.5°C het, simptome wat langer as 10 dae duur, of sukkel om asem te haal." },
+                    "Klein Snye & Skrape": { keywords: ["sny", "skraap", "wond", "bloei"], symptoms: "<b>Tekens:</b> 'n Breuk in die vel, geringe bloeding, bietjie pyn of 'n brandgevoel.", homeCare: "<b>Tuisversorging Voorstelle:</b> Was eers jou hande. Maak die area saggies skoon met koel water en sagte seep. Smeer 'n dun lagie antiseptiese salf aan en bedek met 'n skoon pleister. Vervang die pleister daagliks.", whenToSeeDoctor: "<b>Wanneer om 'n Dokter te Sien:</b> As die sny diep is, nie ophou bloei nie, tekens van infeksie toon (rooiheid, swelling, etter), of deur 'n vuil of geroeste voorwerp veroorsaak is." },
+                    "Ligte Hoofpyn": { keywords: ["hoofpyn", "kopseer", "migraine"], symptoms: "<b>Algemene Simptome:</b> 'n Dowwe, seer pyn in die kop, drukking oor die voorkop of aan die kante/agterkant van die kop.", homeCare: "<b>Tuisversorging Voorstelle:</b> Rus in 'n stil, donker kamer. Plaas 'n koel lap op jou voorkop. Maak seker jy is gehidreer. 'n Apteker kan raad gee oor pynstillers soos parasetamol wat sonder voorskrif beskikbaar is.", whenToSeeDoctor: "<b>Wanneer om 'n Dokter te Sien:</b> As die hoofpyn skielik en ernstig is, gepaard gaan met koors, 'n stywe nek, verwarring, of na 'n kopbesering volg." },
+                    "Geringe Brandwond": { keywords: ["brand", "brandwond"], symptoms: "<b>Tekens:</b> Rooiheid, geringe swelling, en pyn (soortgelyk aan sonbrand).", homeCare: "<b>Tuisversorging Voorstelle:</b> Verkoel die brandwond onmiddellik onder koel (nie koue nie) lopende water vir ongeveer 10 minute. Bedek losweg met 'n steriele gaasverband. Jy kan 'n oor-die-toonbank pynstiller neem.", whenToSeeDoctor: "<b>Wanneer om 'n Dokter te Sien:</b> As die brandwond groter as jou palm is, op die gesig, hande of gewrigte is, blase vorm, of deur chemikalieë of elektrisiteit veroorsaak is." },
+                    "Insekbyt of -steek": { keywords: ["insek", "byt", "steek", "by", "perdeby", "muskiet"], symptoms: "<b>Algemene Simptome:</b> 'n Rooi, geswelde knop op die vel, jeukerigheid, en geringe pyn.", homeCare: "<b>Tuisversorging Voorstelle:</b> As jy gesteek is, verwyder die angel deur dit af te skraap. Was die area met seep en water. Wend 'n koue pak aan om swelling en jeuk te verminder. 'n Antihistamienroom kan help met die jeuk.", whenToSeeDoctor: "<b>Wanneer om 'n Dokter te Sien:</b> As jy 'n ernstige reaksie het, soos moeilike asemhaling, swelling van die gesig of mond, duiseligheid, of 'n uitslag wat versprei. Dit kan 'n allergiese reaksie wees." },
+                    "Geringe Verstuiking": { keywords: ["verstuik", "geswik", "enkel", "gewrig", "spier gerek"], symptoms: "<b>Tekens:</b> Pyn, swelling, kneusing, en beperkte vermoë om die aangetaste gewrig te beweeg.", homeCare: "<b>Tuisversorging Voorstelle:</b> Volg die R.Y.S.K.-beginsel: <b>R</b>us die gewrig, <b>Y</b>s die area vir 15-20 minute elke paar uur, <b>S</b>it druk op met 'n elastiese verband, en <b>K</b>ry die beseerde ledemaat bo jou hart.", whenToSeeDoctor: "<b>Wanneer om 'n Dokter te Sien:</b> As jy nie gewig op die gewrig kan plaas nie, die pyn ernstig is, of as jy 'n 'pop'-geluid gehoor het ten tyde van die besering." },
+                    "Diarree & Braking": { keywords: ["diarree", "braking", "gastro", "maag gogga", "loopmaag"], symptoms: "<b>Algemene Simptome:</b> Los, waterige stoelgang, naarheid, braking, en maagkrampe.", homeCare: "<b>Tuisversorging Voorstelle:</b> Bly gehidreer deur klein hoeveelhede helder vloeistowwe te drink (water, rehidrasie-oplossings, flou tee). Vermy vaste kos todat die braking ophou, en herintroduceer dan vaal kosse soos roosterbrood, rys, of piesangs. Rus baie.", whenToSeeDoctor: "<b>Wanneer om 'n Dokter te Sien:</b> As daar tekens van dehidrasie is (min tot geen urinering, baie droë mond), 'n hoë koors, erge buikpyn, of as simptome langer as 2 dae aanhou." },
+                    "Sonbrand": { keywords: ["sonbrand", "gebrande vel"], symptoms: "<b>Tekens:</b> Rooi, pynlike vel wat warm voel om aan te raak. In ernstige gevalle kan swelling en blase voorkom.", homeCare: "<b>Tuisversorging Voorstelle:</b> Verkoel die vel met 'n koel bad of stort. Smeer na-son lotion of aloe vera-jel aan. Drink ekstra water om dehidrasie te voorkom. 'n Apteker kan oor-die-toonbank pynstillers aanbeveel.", whenToSeeDoctor: "<b>Wanneer om 'n Dokter te Sien:</b> As die sonbrand ernstig is met uitgebreide blase, of as jy koors, kouekoors, of verwarring ervaar." },
+                    "Neusbloeding": { keywords: ["neusbloeding", "bloeiende neus"], symptoms: "<b>Tekens:</b> Bloed wat uit die neusgat drup of vloei.", homeCare: "<b>Tuisversorging Voorstelle:</b> Sit regop en leun effens vorentoe. Knyp die sagte deel van jou neus, net onder die benerige brug, vir 10-15 minute aanhoudend vas. Haal deur jou mond asem. 'n Yspak op die brug van die neus kan ook help.", whenToSeeDoctor: "<b>Wanneer om 'n Dokter te Sien:</b> As die bloeding erg is, langer as 20 minute duur, of deur 'n beduidende kopbesering veroorsaak is." },
+                    "Koors": { keywords: ["koors", "hoë temperatuur"], symptoms: "<b>Tekens:</b> 'n Liggaamstemperatuur bo 38°C, sweet, kouekoors, hoofpyn, en spierpyne.", homeCare: "<b>Tuisversorging Voorstelle:</b> Rus en drink baie vloeistowwe. Dra ligte klere. 'n Apteker kan raad gee oor koorswerende medikasie soos parasetamol.", whenToSeeDoctor: "<b>Wanneer om 'n Dokter te Sien:</b> Vir 'n volwassene, as die koors bo 40°C is of gepaard gaan met erge hoofpyn, 'n stywe nek, uitslag, of verwarring. Vir kinders, raadpleeg 'n dokter of kliniek gebaseer op ouderdom en ander simptome." },
+                    "Pienkoog (Konjunktivitis)": { keywords: ["pienkoog", "konjunktivitis", "seer oog", "rooi oog"], symptoms: "<b>Algemene Simptome:</b> Rooiheid in die wit van die oog, jeukerigheid, 'n grieselrige gevoel, en soms 'n afskeiding wat 'n kors vorm.", homeCare: "<b>Tuisversorging Voorstelle:</b> Gebruik 'n skoon, nat lap om enige afskeiding weg te vee. Wend 'n koel kompres aan. Vermy om aan jou oë te raak en was jou hande gereeld. Moenie handdoeke deel nie. Meeste ligte gevalle klaar vanself op.", whenToSeeDoctor: "<b>Wanneer om 'n Dokter te Sien:</b> As daar beduidende pyn, veranderinge in visie, intense rooiheid is, of as jou immuunstelsel verswak is." },
+                    "Allergieë (Hooikoors)": { keywords: ["allergieë", "hooikoors", "jeukerige oë", "toe neus"], symptoms: "<b>Algemene Simptome:</b> Nies, hoes, 'n loopneus of toe neus, en jeukerige, rooi of waterige oë.", homeCare: "<b>Tuisversorging Voorstelle:</b> Probeer binnenshuis bly op dae met hoë stuifmeeltellings. Hou vensters toe. 'n Apteker kan antihistamien tablette, oogdruppels of neussproei aanbeveel om simptome te help bestuur.", whenToSeeDoctor: "<b>Wanneer om 'n Dokter te Sien:</b> As oor-die-toonbank behandelings nie effektief is nie, of as jou simptome ernstig is en jou daaglikse lewe beïnvloed." },
+                    "Hardlywigheid": { keywords: ["hardlywigheid", "verstop", "kan nie toilet toe gaan nie"], symptoms: "<b>Tekens:</b> Sukkel om stoelgang te slaag, minder gereeld stoelgang slaag as gewoonlik, maagpyn of krampe.", homeCare: "<b>Tuisversorging Voorstelle:</b> Verhoog geleidelik jou veselinname (vrugte, groente, volgrane). Drink baie water deur die dag. Gereelde sagte oefening, soos stap, kan ook help.", whenToSeeDoctor: "<b>Wanneer om 'n Dokter te Sien:</b> As daar bloed in jou stoelgang is, erge pyn, onverklaarbare gewigsverlies, of as die probleem vir meer as 2 weke voortduur." },
+                    "Oorpyn": { keywords: ["oorpyn", "seer oor"], symptoms: "<b>Algemene Simptome:</b> 'n Skerp, dowwe of brandende pyn in een of albei ore. Dit kan konstant wees of kom en gaan.", homeCare: "<b>Tuisversorging Voorstelle:</b> Wend 'n warm lap aan op die aangetaste oor. 'n Apteker kan raad gee oor oor-die-toonbank pynstillers. Vermy om enigiets in jou oorkanaal te plaas.", whenToSeeDoctor: "<b>Wanneer om 'n Dokter te Sien:</b> As die pyn ernstig is, daar vloeistof uit die oor dreineer, jy 'n hoë koors het, of as simptome nie binne 'n paar dae verbeter nie." },
+                    "Maagkrampe": { keywords: ["maagkrampe", "seer maag"], symptoms: "<b>Algemene Simptome:</b> 'n Dowwe of skerp pyn in die buik.", homeCare: "<b>Tuisversorging Voorstelle:</b> Rus en drink helder vloeistowwe. 'n Warmwatersak of warm bad kan help om die pyn te verlig. Vermy ryk, vetterige of gekruide kosse. Pepermenttee kan soms strelend wees.", whenToSeeDoctor: "<b>Wanneer om 'n Dokter te Sien:</b> As die pyn ernstig is, aanhoudend is, of gepaard gaan met koors, braking, of bloed in jou stoelgang." },
+                    "Spierkrampe": { keywords: ["spierkramp", "spierspasma"], symptoms: "<b>Tekens:</b> 'n Skielike en onwillekeurige sametrekking van een of meer van jou spiere, wat dikwels skerp pyn veroorsaak.", homeCare: "<b>Tuisversorging Voorstelle:</b> Strek en masseer die krampagtige spier saggies. Wend 'n warm handdoek of verwarmingskussing aan. Maak seker jy is goed gehidreer, veral as jy geoefen het.", whenToSeeDoctor: "<b>Wanneer om 'n Dokter te Sien:</b> As krampe ernstig is, gereeld voorkom, nie verband hou met ooglopende oorsake soos oefening nie, of gepaard gaan met swelling of rooiheid." },
+                    "Atleetvoet": { keywords: ["atleetvoet", "tinea pedis", "jeukerige voete"], symptoms: "<b>Tekens:</b> 'n Skubberige, jeukerige uitslag wat gewoonlik tussen die tone begin. Dit kan 'n brandgevoel en gebarste vel veroorsaak.", homeCare: "<b>Tuisversorging Voorstelle:</b> Hou jou voete skoon en droog, veral tussen die tone. Ruil jou sokkies gereeld om. 'n Apteker kan antifungale rome, sproei of poeiers wat sonder voorskrif beskikbaar is, voorsien.", whenToSeeDoctor: "<b>Wanneer om 'n Dokter te Sien:</b> As die uitslag ernstig is, nie verbeter met tuisbehandeling nie, of as jy diabetes het en vermoed jy het atleetvoet." },
+                    "Seer Keel": { keywords: ["seer keel", "krapperige keel"], symptoms: "<b>Algemene Simptome:</b> Pyn of 'n krapperige sensasie in die keel, pyn wat vererger met sluk of praat, sukkel om te sluk.", homeCare: "<b>Tuisversorging Voorstelle:</b> Gorrel met warm soutwater. Drink warm vloeistowwe soos tee met heuning. Gebruik oor-die-toonbank suigtablette. Rus jou stem.", whenToSeeDoctor: "<b>Wanneer om 'n Dokter te Sien:</b> As jy sukkel om asem te haal, 'n hoë koors het, 'n uitslag het, of as die seer keel ernstig is en langer as 'n week duur." },
+                    "Hoes": { keywords: ["hoes", "kielie in keel"], symptoms: "<b>Algemene Simptome:</b> 'n Droë of produktiewe (met slym) hoes.", homeCare: "<b>Tuisversorging Voorstelle:</b> Bly gehidreer. Gebruik 'n lugbevochtiger of neem 'n stoomstort. Heuning kan help om 'n hoes te streel (moenie aan kinders onder 1 gee nie).", whenToSeeDoctor: "<b>Wanneer om 'n Dokter te Sien:</b> As die hoes ernstig is, gepaard gaan met 'n hyg of kortasem, bloederige slym produseer, of vir etlike weke aanhou." },
+                    "Toe Neus": { keywords: ["toe neus", "verstopte neus", "sinus"], symptoms: "<b>Algemene Simptome:</b> Sukkel om deur jou neus asem te haal, drukking of pyn in die gesig, dik neusafskeiding.", homeCare: "<b>Tuisversorging Voorstelle:</b> Gebruik 'n soutneussproei of -spoelmiddel. Asem stoom in uit 'n bak warm water. Wend 'n warm, nat handdoek op jou gesig aan.", whenToSeeDoctor: "<b>Wanneer om 'n Dokter te Sien:</b> As jy erge hoofpyn of gesigspyn het, 'n hoë koors het, of simptome wat nie na 10 dae verbeter nie." },
+                    "Geringe Veluitslag": { keywords: ["uitslag", "jeukerige vel", "korwe"], symptoms: "<b>Algemene Simptome:</b> Rooi, jeukerige, of stamperige vel.", homeCare: "<b>Tuisversorging Voorstelle:</b> Vermy krap. Wend 'n koel, nat lap of 'n oor-die-toonbank hidrokortisoonroom aan. Neem 'n koel bad met koeksoda of hawermout.", whenToSeeDoctor: "<b>Wanneer om 'n Dokter te Sien:</b> As die uitslag jou hele liggaam bedek, gepaard gaan met koors, pynlik is, of tekens van infeksie toon soos swelling of etter." },
+                    "Sooibrand": { keywords: ["sooibrand", "slegte spysvertering", "suur terugvloei"], symptoms: "<b>Algemene Simptome:</b> 'n Brandpyn in jou bors, gewoonlik na ete, wat snags erger kan wees.", homeCare: "<b>Tuisversorging Voorstelle:</b> Vermy snellervoedsel (pittige, vetterige kosse, kafeïen). Moenie onmiddellik na ete gaan lê nie. 'n Apteker kan oor-die-toonbank teensuurmiddels aanbeveel.", whenToSeeDoctor: "<b>Wanneer om 'n Dokter te Sien:</b> As jy erge borspyn of -druk het, veral as dit gekombineer word met pyn in die arm of kakebeen, of kortasem. Sien 'n dokter as sooibrand meer as twee keer per week voorkom." }
+                },
+                generalConversationData: { visitingHours: { keywords: ["besoekure", "besoek", "wanneer kan ek kuier"], response: "Besoekure vir ons Kaapstad-hospitale is:<ul><li><b>Groote Schuur, Tygerberg, New Somerset, Victoria, Mitchells Plain & Khayelitsha:</b> 15:00 - 16:00 & 19:00 - 20:00 daagliks.</li><li><b>Rooikruis-kinderhospitaal:</b> Besoek is oor die algemeen oop vir ouers, maar dit is die beste om met die spesifieke saal te bevestig.</li></ul><i>Neem asseblief kennis dat ure kan verander. Dit is altyd 'n goeie idee om die hospitaal te skakel om te bevestig.</i>" }, contactInfo: { keywords: ["kontak", "telefoonnommer", "bel", "nommer"], response: "Hier is die hoofkontaknommers vir ons Kaapstad-hospitale:<ul><li><b>Groote Schuur:</b> 021 404 9111</li><li><b>Tygerberg:</b> 021 938 4911</li><li><b>Rooikruis-kinderhospitaal:</b> 021 658 5111</li><li><b>New Somerset:</b> 021 402 6911</li><li><b>Mitchells Plain:</b> 021 377 4300</li><li><b>Khayelitsha:</b> 021 360 4200</li><li><b>Victoria Hospitaal:</b> 021 799 1111</li></ul>" }, location: { keywords: ["ligging", "adres", "waar is julle", "hoe kom ek daar"], response: "Hier is die adresse vir groot openbare hospitale in Kaapstad:<ul><li><b>Groote Schuur Hospitaal:</b> Hoofweg, Observatory</li><li><b>Tygerberg Hospitaal:</b> Francie van Zijl Rylaan, Tygerberg</li><li><b>Rooikruis Oorlogsgedenkhospitaal vir Kinders:</b> Klipfonteinweg, Rondebosch</li><li><b>New Somerset Hospitaal:</b> Portswoodweg, Groenpunt</li><li><b>Mitchells Plain Hospitaal:</b> AZ Bermanrylaan 8, Lentegeur</li><li><b>Khayelitsha Hospitaal:</b> H/v Steve Biko & Walter Sisulu Rylane, Khayelitsha</li><li><b>Victoria Hospitaal:</b> Alphenheuwelweg, Wynberg</li></ul>" } }
+            },
+            zu: {
+                chatbotName: "Tony i-Chatbot",
+                greeting: "Sawubona! Ngingu-Tony i-Chatbot, umsizi wakho obonakalayo.",
+                disclaimer: "<b>Isaziso Esibalulekile:</b> Ngingumsizi obonakalayo futhi angithathi indawo yochwepheshe bezokwelapha ongumuntu. Angikwazi ukunikeza iseluleko sezokwelapha noma ukuxilonga. <b>Kunoma yisiphi isimo esiphuthumayo sezokwelapha, sicela ushayele u-10177 ngokushesha.</b><br><br>Ngokusebenzisa le ngxoxo, uyavumelana nesaziso sethu sobumfihlo mayelana nokuqoqwa kwedatha ngezinjongo zokusebenza.",
+                howCanIHelp: "Ngingakusiza ngani namhlanje?",
+                misunderstood: "Ngiyaxolisa, angikwazi ukusiza ngalokho. Ungangicela <b>ukuhlela i-aphoyintimenti</b>, <b>ukuvuselela umyalelo</b>, noma ubuze ngemibuzo efana <b>namahora okuvakashela</b> kanye <b>nokupaka</b>.",
+                scheduleAppointment: "Hlela I-aphoyintimenti",
+                refillPrescription: "Vuselela Umyalelo",
+                generalInfo: "Ulwazi Olujwayelekile",
+                homeCareInfo: "Ulwazi Lokunakekelwa Ekhaya",
+                emergencyServices: "Izinsizakalo Eziphuthumayo",
+                visitingHours: "Amahora Okuvakashela",
+                contactInfo: "Imininingwane Yokuxhumana",
+                location: "Indawo",
+                departments: "Iminyango",
+                ambulance: "I-ambulensi",
+                police: "Amaphoyisa",
+                fireDepartment: "Ezomlilo",
+                traumaUnits: "Amagumbi Okuhlukumezeka",
+                mainMenu: "Imenyu Enkulu",
+                startAppointment: "Yebo. Ngingakusiza ukuhlela i-aphoyintimenti. Ngubani igama eligcwele lesiguli?",
+                askReason: "Ngiyabonga. Siyini isizathu sokuvakasha kwakho? (isb. Ukuhlolwa Okujwayelekile, Izimpawu Zomkhuhlane)",
+                askDateTime: "Ngikuzwile. Iluphi usuku nesikhathi osikhethayo se-aphoyintimenti? (isb. Agasti 24, 2025, cishe ngo-10:00 AM)",
+                askContact: "Kuhle kakhulu. Iyiphi inombolo yokuxhumana esingakuthola kuyo? (isb. +27 82 123 4567)",
+                askMedicalAid: "Ngiyabonga. Okokugcina, ungacela unikeze imininingwane ye-medical aid yakho nenombolo yobulungu? (isb. Discovery, 123456789). Uma ungenayo, bhala 'Anginayo'.",
+                confirmAppointment: (data) => `Ngiyabonga, ${data.name}. Sithumele isicelo sakho se-aphoyintimenti ngale mininingwane elandelayo:<br><br><b>Isizathu:</b> ${data.reason}<br><b>Isikhathi Esikhethiwe:</b> ${data.dateTime}<br><b>Imininingwane Yokuxhumana:</b> ${data.contact}<br><b>I-Medical Aid:</b> ${data.medicalAid}<br><br>Uzothola ucingo lokuqinisekisa oluvela kubasebenzi bethu maduze.`,
+                preVisitPrompt: "Ukuze sikusize ulungiselele, ungathanda uhlu lokuhlola olusheshayo lwangaphambi kokuvakasha?",
+                preVisitChecklist: `<b>Uhlu lokuhlola lwangaphambi kokuvakasha:</b><br><ul><li>Sicela uphathe <b>umazisi wakho</b>, ikhadi lasesibhedlela/lomtholampilo, kanye nanoma yiziphi izincwadi zokudluliselwa.</li><li>Ukupaka kungaba nomkhawulo, ngakho sicela uvumele isikhathi esengeziwe noma ucabangele ukusebenzisa izithuthi zomphakathi.</li><li>Izikhathi zokulinda zingahluka. Siyakwazisa ukubekezela kwakho.</li></ul>`,
+                startRefill: "Ngingakusiza ngesicelo sakho sokuvuselela umyalelo. Lithini igama lomuthi?",
+                askDosage: "Ngiyabonga. Ingakanani idosi? (isb. 50mg)",
+                askPatientName: "Sicela unikeze igama eligcwele lesiguli ukuze kuqinisekiswe.",
+                askRefillContact: "Ngikuzwile. Iyiphi inombolo yokuxhumana enhle yalokhu kuvuselela? (isb. +27 82 123 4567)",
+                askPickup: "Ngiyabonga. Ungathanda ukuwulanda kuphi umyalelo wakho?",
+                confirmRefill: (data) => `Ngiyabonga. Isicelo sakho sokuvuselela i-${data.medication} (${data.dosage}) sika-${data.patientId} sithunyelwe ekhemisi. Uzokwaziswa ku-${data.contact} uma isilungele ukulandwa e-<b>${data.pickupLocation}</b>.`,
+                departmentIntro: "Ngingakusiza ngalokhu. Sicela ukhethe umnyango ukuze ufunde kabanzi ngalokho abakwenzayo:",
+                departmentSelected: (dept) => `Ngiyabonga ngokukhetha i-${dept}. Ukuze uthole ama-aphoyintimenti ahlobene nalo mnyango, sicela usebenzise inketho ethi "Hlela I-aphoyintimenti".`,
+                generalInfoPrompt: "Nginganikeza ulwazi ngezihloko ezilandelayo. Sicela ukhethe esisodwa:",
+                homeCareDisclaimer: "<b>KUBALULEKE KAKHULU:</b> Lolu lwazi olulandelayo ololwazi olujwayelekile nokunakekelwa ekhaya kwezinkinga ezincane kuphela. <b>AKUSONA</b> iseluleko sezokwelapha. Uma ukhathazekile ngezimpawu zakho, noma uma ziba zimbi kakhulu, sicela ubone udokotela noma uvakashele umtholampilo.",
+                homeCarePrompt: "Iyiphi inkinga obhekene nayo? Ungangitshela ngezinto ezinjengomkhuhlane, ukusikeka okuncane, noma ikhanda elibuhlungu.",
+                homeCareFallback: "Ngiyaxolisa, angikwazi ukunikeza ulwazi ngalokho. Ngingasiza ngalezi zihloko ezilandelayo:",
+                emergency: (loc) => `<b>Lokhu kubonakala kuyisimo esiphuthumayo sezokwelapha. Sicela ushayele u-10177 ngokushesha.</b><br><br>Ungathembeli kule ngxoxo ukuze uthole usizo. Nazi ezinye izibhedlela eziseduze:<br>${loc}`,
+                emergencyDisclaimer: "<b>Kunoma yisiphi isimo esiphuthumayo, shayela u-10177 ngokushesha.</b> Le sevisi AYIKWAZI ukuthumela abosizo oluphuthumayo. Nansi imininingwane yokuxhumana ebalulekile:",
+                ambulanceInfo: "Ukuze uthole i-ambulensi kazwelonke, shayela ku-<b>10177</b>.",
+                policeInfo: "Ukuze uthole Amaphoyisa aseNingizimu Afrika (SAPS), shayela ku-<b>10111</b>.",
+                fireInfo: "Ukuze uthole Ezomlilo, shayela ku-<b>107</b> ngocingo lwasendlini noma ku-<b>021 480 7700</b> ngomakhalekhukhwini.",
+                traumaInfo: "Izibhedlela ezilandelayo zinamagumbi okuhlukumezeka asebenza amahora angu-24: <b>Groote Schuur, Tygerberg, New Somerset, Mitchells Plain, ne-Khayelitsha.</b>",
+                noMedicalAdvice: "Ngingumsizi obonakalayo futhi angikwazi ukunikeza iseluleko sezokwelapha. Sicela uxhumane nochwepheshe bezokwelapha ofanelekayo nganoma yiziphi izinkinga zempilo.",
+                endConversation: "Kulungile! Zizwe ukhululekile ukubuza uma kukhona okunye okuvelayo. Imenyu enkulu iyatholakala ngezansi uma uyidinga.",
+                homeCareFollowUp: "Nginganikeza ulwazi ngezinye izihloko zokunakekelwa ekhaya, noma singabuyela kumenyu enkulu.",
+                genericError: "Nginenkinga ethile njengamanje. Sicela uzame futhi emzuzwini.",
+                chooseLanguagePrompt: "Sicela ukhethe ulimi ezinkethweni ezinikeziwe.",
+                yesPlease: "Yebo, ngicela",
+                noThanks: "Cha, ngiyabonga",
+                departmentsData: { "Ezempilo Yenhliziyo (Cardiology)": "Okwezinkinga ezihlobene nenhliziyo nemithambo yegazi, njengobuhlungu besifuba noma umfutho wegazi ophezulu.", "Ezempilo Yezingane (Pediatrics)": "Ukunakekelwa okukhethekile kwezinsana, izingane, kanye nentsha.", "Ezempilo Yamathambo (Orthopedics)": "Okwezinkinga zamathambo, amalunga, imisipha nemisipha.", "Imithi Ejwayelekile (General Medicine)": "Ukuxilongwa nokwelashwa kwezifo ezahlukahlukene ezivamile zabantu abadala.", "Ezimo Eziphuthumayo (Emergency)": "Okokulimala okusheshayo, okusongela impilo kanye nezifo. Sicela ushayele u-10177 ezimeni eziphuthumayo." },
+                homeCareData: {
+                    "Umkhuhlane Ovamile": { keywords: ["umkhuhlane", "imfuluwenza", "ikhala eligijimayo", "ukuthimula"], symptoms: "<b>Izimpawu Ezivamile:</b> Ikhala eligijimayo noma elivalekile, umphimbo obuhlungu, ukukhwehlela, ukuthimula, ikhanda elibuhlungu kancane noma imizimba ebuhlungu.", homeCare: "<b>Ukunakekelwa Ekhaya:</b> Phumula ngokwanele, phuza uketshezi oluningi (amanzi, ijusi, umhluzi ofudumele), futhi usebenzise isifutho sekhala se-saline ukudambisa ukuvaleka. Ungakhuluma nosokhemisi ngemithi yezinhlungu etholakala ngaphandle kwencwadi kadokotela.", whenToSeeDoctor: "<b>Nini Kufanele Ubone Udokotela:</b> Uma unomkhuhlane ongaphezu kuka-38.5°C, izimpawu ezihlala isikhathi esingaphezu kwezinsuku eziyi-10, noma ubunzima bokuphefumula." },
+                    "Imisiko Emincane Nemihubulu": { keywords: ["ukusikeka", "umhubulu", "isilonda", "opha"], symptoms: "<b>Izimpawu:</b> Ukuphuka kwesikhumba, ukopha okuncane, ubuhlungu obuthile.", homeCare: "<b>Ukunakekelwa Ekhaya:</b> Qala ngokugeza izandla. Hlanza indawo ngobumnene ngamanzi apholile nensipho ethambile. Gcoba ungqimba oluncane lwe-antiseptic ointment bese umboza ngebhandeshi elihlanzekile. Shintsha ibhandeshi nsuku zonke.", whenToSeeDoctor: "<b>Nini Kufanele Ubone Udokotela:</b> Uma ukusikeka kujulile, kungayeki ukopha, kukhombisa izimpawu zokutheleleka (ububomvu, ukuvuvukala, ubovu), noma kubangelwe yinto engcolile noma egqwalile." },
+                    "Ikhanda Elibuhlungu Kancane": { keywords: ["ikhanda", "ikhanda elibuhlungu"], symptoms: "<b>Izimpawu Ezivamile:</b> Ubuhlungu obufiphele, obuqhubekayo ekhanda, ingcindezi ebunzini noma ezinhlangothini/ngemuva kwekhanda.", homeCare: "<b>Ukunakekelwa Ekhaya:</b> Phumula ekamelweni elithulile, elinomnyama. Beka indwangu epholile ebunzini. Qiniseka ukuthi uphuza uketshezi olwanele. Usokhemisi angakweluleka ngemithi yezinhlungu etholakala ngaphandle kwencwadi kadokotela njenge-paracetamol.", whenToSeeDoctor: "<b>Nini Kufanele Ubone Udokotela:</b> Uma ikhanda liqala kungazelelwe futhi liba buhlungu kakhulu, lihambisana nomkhuhlane, intamo eqinile, ukudideka, noma lilandela ukulimala kwekhanda." },
+                    "Ukusha Okuncane": { keywords: ["ukusha", "okushile"], symptoms: "<b>Izimpawu:</b> Ububomvu, ukuvuvukala okuncane, nobuhlungu (okufana nokusha yilanga).", homeCare: "<b>Ukunakekelwa Ekhaya:</b> Pholisa ngokushesha indawo eshile ngaphansi kwamanzi apholile (hhayi abandayo kakhulu) imizuzu engaba yi-10. Vala kancane ngebhandeshi eliyinyumba. Ungaphuza imishanguzo yezinhlungu etholakala ngaphandle kwencwadi kadokotela.", whenToSeeDoctor: "<b>Nini Kufanele Ubone Udokotela:</b> Uma ukusha kukhulu kunentende yesandla sakho, kusobusweni, ezandleni, noma emalungeni, kunamabhamuza, noma kubangelwe amakhemikhali noma ugesi." },
+                    "Ukulunywa Isinambuzane": { keywords: ["isinambuzane", "ukulunywa", "ulwembu", "inyosi", "umnyovu"], symptoms: "<b>Izimpawu Ezivamile:</b> Iqhubu elibomvu, elivuvukele esikhunjeni, ukulunywa, nobuhlungu obuncane.", homeCare: "<b>Ukunakekelwa Ekhaya:</b> Uma uhlatshiwe, susa udosi ngokulukhuhla. Geza indawo ngensipho namanzi. Faka iphakethe elibandayo ukunciphisa ukuvuvukala nokulunywa. Ukhilimu we-antihistamine ungasiza ekulunyweni.", whenToSeeDoctor: "<b>Nini Kufanele Ubone Udokotela:</b> Uma unokusabela okukhulu, njengokuphefumula kanzima, ukuvuvukala kobuso noma komlomo, isiyezi, noma ukuqubuka okusabalalayo. Lokhu kungaba ukungezwani komzimba nezinto ezithile." },
+                    "Ukwenyela Okuncane": { keywords: ["ukwenyela", "ukupoteka", "iqakala", "isihlakala", "umsipha odonsekile"], symptoms: "<b>Izimpawu:</b> Ubuhlungu, ukuvuvukala, ukulimala okuluhlaza, nokungakwazi ukunyakazisa kahle ilunga elithintekile.", homeCare: "<b>Ukunakekelwa Ekhaya:</b> Landela umthetho we-R.I.C.E.: <b>R</b>est (Phumuza) ilunga, <b>I</b>ce (Faka iqhwa) endaweni imizuzu eyi-15-20 njalo ngamahora ambalwa, <b>C</b>ompress (Cindezela) ngebhandeshi, bese <b>E</b>levate (Phakamisa) isitho esilimele sibe ngaphezu kwenhliziyo.", whenToSeeDoctor: "<b>Nini Kufanele Ubone Udokotela:</b> Uma ungakwazi ukubeka isisindo elungeni, ubuhlungu bukhulu, noma uma uzwe umsindo 'wokuqhekeka' ngesikhathi sokulimala." },
+                    "Uhudo Nokuhlanza": { keywords: ["uhudo", "ukuhlanza", "isisu esihambisayo", "igciwane lesisu"], symptoms: "<b>Izimpawu Ezivamile:</b> Indle exekethile, enamanzi, isicanucanu, ukuhlanza, namajaqamba esiswini.", homeCare: "<b>Ukunakekelwa Ekhaya:</b> Hlala uphuza uketshezi olwanele ngokuphuza amanzi amancane (amanzi, izixazululo zokubuyisela amanzi emzimbeni, itiye elilula). Gwema ukudla okuqinile kuze kuphele ukuhlanza, bese uqala kabusha ngokudla okulula njengesinkwa esithosiwe, ilayisi, noma ubhanana. Phumula ngokwanele.", whenToSeeDoctor: "<b>Nini Kufanele Ubone Udokotela:</b> Uma kunezimpawu zokuphelelwa amanzi emzimbeni (ukuchama okuncane noma ukungachami nhlobo, umlomo owome kakhulu), umkhuhlane ophezulu, ubuhlungu obukhulu besisu, noma uma izimpawu ziqhubeka izinsuku ezingaphezu kwezimbili." },
+                    "Ukusha Ilanga": { keywords: ["ukusha ilanga", "isikhumba esishile"], symptoms: "<b>Izimpawu:</b> Isikhumba esibomvu, esibuhlungu esizwakala sishisa lapho sithintwa. Ezimweni ezimbi kakhulu, kungaba khona ukuvuvukala namabhamuza.", homeCare: "<b>Ukunakekelwa Ekhaya:</b> Pholisa isikhumba ngokugeza ngamanzi apholile. Gcoba i-after-sun lotion noma i-aloe vera gel. Phuza amanzi engeziwe ukuvimbela ukuphelelwa amanzi emzimbeni. Usokhemisi angakuncoma izidambisi zinhlungu.", whenToSeeDoctor: "<b>Nini Kufanele Ubone Udokotela:</b> Uma ukusha kunzima kunamabhamuza amaningi, noma uma unomkhuhlane, amakhaza, noma ukudideka." },
+                    "Ukopha Kwekhala": { keywords: ["ukopha ikhala", "ikhala elophayo"], symptoms: "<b>Izimpawu:</b> Igazi eliconsayo noma eligeleza livela ekhaleni.", homeCare: "<b>Ukunakekelwa Ekhaya:</b> Hlala uqondile bese uncika phambili kancane. Cindezela ingxenye ethambile yekhala lakho, ngaphansi nje kwebhuloho lethambo, imizuzu eyi-10-15 ngokuqhubekayo. Phefumula ngomlomo wakho. Iphakethe leqhwa ebhulohweni lekhala lingasiza.", whenToSeeDoctor: "<b>Nini Kufanele Ubone Udokotela:</b> Uma ukopha kunzima, kuthatha isikhathi esingaphezu kwemizuzu engama-20, noma kubangelwe ukulimala okukhulu ekhanda." },
+                    "Umkhuhlane": { keywords: ["umkhuhlane", "izinga lokushisa eliphezulu"], symptoms: "<b>Izimpawu:</b> Izinga lokushisa lomzimba elingaphezu kuka-38°C, ukujuluka, amakhaza, ikhanda elibuhlungu, nobuhlungu bemisipha.", homeCare: "<b>Ukunakekelwa Ekhaya:</b> Phumula futhi uphuze uketshezi oluningi. Gqoka izingubo ezilula. Usokhemisi angakweluleka ngemithi yokwehlisa umkhuhlane njenge-paracetamol.", whenToSeeDoctor: "<b>Nini Kufanele Ubone Udokotela:</b> Kumuntu omdala, uma umkhuhlane ungaphezu kuka-40°C noma uhambisana nekhanda elibuhlungu kakhulu, intamo eqinile, ukuqubuka, noma ukudideka. Ezinganeni, thintana nodokotela ngokususelwa eminyakeni yobudala nezinye izimpawu." },
+                    "Iso Elibomvu (Conjunctivitis)": { keywords: ["iso elibomvu", "conjunctivitis", "iso elibuhlungu"], symptoms: "<b>Izimpawu Ezivamile:</b> Ububomvu engxenyeni emhlophe yeso, ukulunywa, umuzwa wokuthi kukhona okuthile esweni, futhi ngezinye izikhathi kube khona oketshezi olwakha uqweqwe.", homeCare: "<b>Ukunakekelwa Ekhaya:</b> Sebenzisa indwangu ehlanzekile, emanzi ukusula noma yikuphi uketshezi. Faka okuthile okupholile. Gwema ukuthinta amehlo akho futhi ugeze izandla njalo. Ungabelani ngamathawula. Izimo eziningi ezilula ziyaziphelela.", whenToSeeDoctor: "<b>Nini Kufanele Ubone Udokotela:</b> Uma kunobuhlungu obukhulu, ushintsho ekuboneni, ububomvu obukhulu, noma uma amasosha akho omzimba ebuthakathaka." },
+                    "Ukungezwani Komzimba (Hay Fever)": { keywords: ["ukungezwani komzimba", "hay fever", "amehlo alimayo"], symptoms: "<b>Izimpawu Ezivamile:</b> Ukuthimula, ukukhwehlela, ikhala eligijimayo noma elivalekile, namehlo alimayo, abomvu noma anamanzi.", homeCare: "<b>Ukunakekelwa Ekhaya:</b> Zama ukuhlala endlini ngezinsuku ezinempova eningi. Vala amafasitela. Usokhemisi angakuncoma amaphilisi e-antihistamine, amaconsi amehlo, noma izifutho zekhala ukusiza ukulawula izimpawu.", whenToSeeDoctor: "<b>Nini Kufanele Ubone Udokotela:</b> Uma ukwelashwa okutholakala ngaphandle kwencwadi kadokotela kungasebenzi, noma uma izimpawu zakho zinzima futhi ziphazamisa impilo yakho yansuku zonke." },
+                    "Ukuqunjelwa": { keywords: ["ukuqunjelwa", "ukuvaleka", "ukungakwazi ukuya endlini yangasese"], symptoms: "<b>Izimpawu:</b> Ubunzima bokukhipha indle, ukukhipha indle kancane kunokujwayelekile, ubuhlungu besisu noma amajaqamba.", homeCare: "<b>Ukunakekelwa Ekhaya:</b> Yandisa kancane kancane ukudla kwakho i-fibre (izithelo, imifino, okusanhlamvu okuphelele). Phuza amanzi amaningi usuku lonke. Ukuzivocavoca okulula njalo, njengokuhamba, nakho kungasiza.", whenToSeeDoctor: "<b>Nini Kufanele Ubone Udokotela:</b> Uma kukhona igazi endleni yakho, ubuhlungu obukhulu, ukwehla kwesisindo okungachazeki, noma uma inkinga iqhubeka isikhathi esingaphezu kwamaviki ama-2." },
+                    "Ubuhlungu Bendlebe": { keywords: ["ubuhlungu bendlebe", "indlebe ebuhlungu"], symptoms: "<b>Izimpawu Ezivamile:</b> Ubuhlungu obuhlabayo, obufiphele, noma obushisayo endlebeni eyodwa noma zombili. Bungaba obungapheli noma bufike budlule.", homeCare: "<b>Ukunakekelwa Ekhaya:</b> Faka indwangu efudumele endlebeni ethintekile. Usokhemisi angakweluleka ngemithi yezinhlungu etholakala ngaphandle kwencwadi kadokotela. Gwema ukufaka noma yini emgodini wendlebe yakho.", whenToSeeDoctor: "<b>Nini Kufanele Ubone Udokotela:</b> Uma ubuhlungu bunzima, kukhona uketshezi oluphuma endlebeni, unomkhuhlane ophezulu, noma uma izimpawu zingabi ngcono ezinsukwini ezimbalwa." },
+                    "Amajaqamba Esisu": { keywords: ["amajaqamba esisu", "isisu esibuhlungu"], symptoms: "<b>Izimpawu Ezivamile:</b> Ubuhlungu obufiphele noma obuhlabayo esiswini.", homeCare: "<b>Ukunakekelwa Ekhaya:</b> Phumula uphuze uketshezi olucacile. Ibhodlela lamanzi ashisayo noma ukugeza ngamanzi afudumele kungasiza ekudambiseni ubuhlungu. Gwema ukudla okunamafutha amaningi noma okubabayo. Itiye le-Peppermint ngezinye izikhathi lingaduduza.", whenToSeeDoctor: "<b>Nini Kufanele Ubone Udokotela:</b> Uma ubuhlungu bunzima, buqhubeka, noma buhambisana nomkhuhlane, ukuhlanza, noma igazi endleni yakho." },
+                    "Amajaqamba Emisipha": { keywords: ["amajaqamba emisipha", "i-charley horse", "ukuqina kwemisipha"], symptoms: "<b>Izimpawu:</b> Ukufinyela kungazelelwe nokungazibandakanyi kwemisipha eyodwa noma ngaphezu, okuvame ukubangela ubuhlungu obukhulu.", homeCare: "<b>Ukunakekelwa Ekhaya:</b> Yelula ngobumnene futhi umasaje umsipha oqaqekile. Faka ithawula elifudumele noma i-heating pad. Qiniseka ukuthi uphuza uketshezi olwanele, ikakhulukazi uma ubuzivocavoca.", whenToSeeDoctor: "<b>Nini Kufanele Ubone Udokotela:</b> Uma amajaqamba enzima, enzeka njalo, engahlobene nezimbangela ezisobala njengokuzivocavoca, noma ahambisana nokuvuvukala noma ububomvu." },
+                    "Ukhunta Lwezinyawo": { keywords: ["ukhunta lwezinyawo", "tinea pedis", "izinyawo ezilumayo"], symptoms: "<b>Izimpawu:</b> Ukuqubuka okunamaxolo, okulimayo okuvame ukuqala phakathi kwezinzwane. Kungabangela ukuhlabeka, ukushisa, nesikhumba esiqhekekile.", homeCare: "<b>Ukunakekelwa Ekhaya:</b> Gcina izinyawo zakho zihlanzekile futhi zomile, ikakhulukazi phakathi kwezinzwane. Shintsha amasokisi akho njalo. Usokhemisi angakunikeza okhilimu be-antifungal, izifutho, noma izimpushana ezitholakala ngaphandle kwencwadi kadokotela.", whenToSeeDoctor: "<b>Nini Kufanele Ubone Udokotela:</b> Uma ukuqubuka kunzima, kungabi ngcono ngokwelashwa kwasekhaya, noma uma unesifo sikashukela futhi usola ukuthi unokhunta lwezinyawo." },
+                    "Umphimbo Obuhlungu": { keywords: ["umphimbo obuhlungu", "umphimbo olumayo"], symptoms: "<b>Izimpawu Ezivamile:</b> Ubuhlungu noma umuzwa wokuklwebheka emphinjeni, ubuhlungu obuba bubi kakhulu lapho ugwinya noma ukhuluma, ubunzima bokugwinya.", homeCare: "<b>Ukunakekelwa Ekhaya:</b> Gquma ngamanzi afudumele anosawoti. Phuza uketshezi olufudumele njengotiye noju. Sebenzisa amaphilisi okudambisa umphimbo atholakala ngaphandle kwencwadi kadokotela. Phumuza izwi lakho.", whenToSeeDoctor: "<b>Nini Kufanele Ubone Udokotela:</b> Uma unenkinga yokuphefumula, umkhuhlane ophezulu, ukuqubuka, noma uma umphimbo ubuhlungu kakhulu futhi uhlala isikhathi esingaphezu kwesonto." },
+                    "Ukukhwehlela": { keywords: ["ukukhwehlela", "ukuququda emphinjeni"], symptoms: "<b>Izimpawu Ezivamile:</b> Ukukhwehlela okomile noma okuneflegma.", homeCare: "<b>Ukunakekelwa Ekhaya:</b> Hlala uphuza uketshezi olwanele. Sebenzisa i-humidifier noma geza ngamanzi ashisayo. Uju lungasiza ekudambiseni ukukhwehlela (unganiki izingane ezingaphansi konyaka owodwa).", whenToSeeDoctor: "<b>Nini Kufanele Ubone Udokotela:</b> Uma ukukhwehlela kunzima, kuhambisana nokuphefumula kanzima, kukhipha igazi, noma kuthatha amasonto ambalwa." },
+                    "Ikhala Elivalekile": { keywords: ["ikhala elivalekile", "impumulo evalekile", "i-sinus"], symptoms: "<b>Izimpawu Ezivamile:</b> Ubunzima bokuphefumula ngekhala, ingcindezi noma ubuhlungu ebusweni, uketshezi olujiyile oluphuma ekhaleni.", homeCare: "<b>Ukunakekelwa Ekhaya:</b> Sebenzisa isifutho sekhala se-saline noma uhlanze. Hhogela umusi endishini yamanzi ashisayo. Beka ithawula elifudumele, elimanzi ebusweni bakho.", whenToSeeDoctor: "<b>Nini Kufanele Ubone Udokotela:</b> Uma unekhanda elibuhlungu kakhulu noma ubuhlungu ebusweni, umkhuhlane ophezulu, noma izimpawu ezingabi ngcono ngemva kwezinsuku eziyi-10." },
+                    "Ukuqubuka Kwesikhumba Okuncane": { keywords: ["ukuqubuka", "isikhumba esilumayo", "i-hives"], symptoms: "<b>Izimpawu Ezivamile:</b> Isikhumba esibomvu, esilumayo, noma esinamagquma.", homeCare: "<b>Ukunakekelwa Ekhaya:</b> Gwema ukuzinwaya. Faka indwangu epholile, emanzi noma ukhilimu we-hydrocortisone otholakalayo. Geza ngamanzi apholile anesoda yokubhaka noma i-oatmeal.", whenToSeeDoctor: "<b>Nini Kufanele Ubone Udokotela:</b> Uma ukuqubuka kusabalele umzimba wonke, kuhambisana nomkhuhlane, kubuhlungu, noma kukhombisa izimpawu zokutheleleka njengokuvuvukala noma ubovu." },
+                    "Isilungulela": { keywords: ["isilungulela", "ukugayeka kabi kokudla", "i-acid reflux"], symptoms: "<b>Izimpawu Ezivamile:</b> Ubuhlungu obushisayo esifubeni sakho, imvamisa ngemva kokudla, obungaba bubi kakhulu ebusuku.", homeCare: "<b>Ukunakekelwa Ekhaya:</b> Gwema ukudla okubangela isilungulela (okunamafutha, okubabayo, i-caffeine). Ungalali phansi ngokushesha ngemva kokudla. Usokhemisi angakuncoma ama-antacid atholakala.", whenToSeeDoctor: "<b>Nini Kufanele Ubone Udokotela:</b> Uma unobuhlungu obukhulu besifuba noma ingcindezi, ikakhulukazi uma kuhambisana nobuhlungu engalweni noma emhlathini, noma ukuphefumula kanzima. Bona udokotela uma isilungulela senzeka ngaphezu kokubili ngesonto." }
+                },
+                generalConversationData: { visitingHours: { keywords: ["amahora okuvakashela", "vakashela", "ngingavakashela nini"], response: "Amahora okuvakashela ezibhedlela zethu zaseKapa yilawa:<ul><li><b>Groote Schuur, Tygerberg, New Somerset, Victoria, Mitchells Plain & Khayelitsha:</b> 15:00 - 16:00 & 19:00 - 20:00 nsuku zonke.</li><li><b>Isibhedlela Sezingane iRed Cross:</b> Ukuvakashela kuvame ukuvulelwa abazali, kodwa kungcono ukuqinisekisa newadi ethile.</li></ul><i>Sicela wazi ukuthi amahora angashintsha. Kungumqondo omuhle njalo ukushayela isibhedlela ukuze uqinisekise.</i>" }, contactInfo: { keywords: ["imininingwane yokuxhumana", "inombolo yocingo", "shayela", "inombolo"], response: "Nazi izinombolo zocingo eziyinhloko zezibhedlela zethu zaseKapa:<ul><li><b>Groote Schuur:</b> 021 404 9111</li><li><b>Tygerberg:</b> 021 938 4911</li><li><b>Isibhedlela Sezingane iRed Cross:</b> 021 658 5111</li><li><b>New Somerset:</b> 021 402 6911</li><li><b>Mitchells Plain:</b> 021 377 4300</li><li><b>Khayelitsha:</b> 021 360 4200</li><li><b>Isibhedlela iVictoria:</b> 021 799 1111</li></ul>" }, location: { keywords: ["indawo", "ikheli", "nikuphi", "ngifika kanjani"], response: "Nanka amakheli ezibhedlela zomphakathi ezinkulu eKapa:<ul><li><b>Isibhedlela iGroote Schuur:</b> Main Road, Observatory</li><li><b>Isibhedlela iTygerberg:</b> Francie van Zijl Avenue, Tygerberg</li><li><b>Isibhedlela Sezingane iRed Cross War Memorial:</b> Klipfontein Road, Rondebosch</li><li><b>Isibhedlela iNew Somerset:</b> Portswood Road, Green Point</li><li><b>Isibhedlela iMitchells Plain:</b> 8 AZ Berman Drive, Lentegeur</li><li><b>Isibhedlela saseKhayelitsha:</b> C/o Steve Biko & Walter Sisulu Drives, Khayelitsha</li><li><b>Isibhedlela iVictoria:</b> Alphen Hill Road, Wynberg</li></ul>" } }
+            }
+        };
+        
+        const hospitalData = {
+            "local_emergency": "10177",
+            "hospitals": [ "Groote Schuur Hospital", "Tygerberg Hospital", "Red Cross Children's Hospital", "New Somerset Hospital", "Mitchells Plain Hospital", "Khayelitsha Hospital", "Victoria Hospital" ]
+        };
+        
+        let conversationState = { intent: null, step: 0, data: {}, language: null, lastIntent: null };
+
+        async function saveAppointmentToDatabase(appointmentData) {
+            try {
+                await fetch('/.netlify/functions/save-message', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(appointmentData),
+                });
+            } catch (error) {
+                console.error('Could not save appointment to the database:', error);
+            }
+        }
+        
+        async function saveRefillToDatabase(refillData) {
+            try {
+                await fetch('/.netlify/functions/save-refill', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(refillData),
+                });
+            } catch (error) {
+                console.error('Could not save refill request to the database:', error);
+            }
+        }
+
+        async function getAiResponse(prompt) {
+            try {
+                const response = await fetch('/.netlify/functions/ask-ai', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt, language: conversationState.language }),
+                });
+                if (!response.ok) {
+                    throw new Error(`AI function failed with status: ${response.status}`);
+                }
+                const data = await response.json();
+                addMessage(data.reply, 'bot');
+            } catch (error) {
+                console.error("Error getting AI response:", error);
+                addMessage(getText('genericError'), 'bot');
+            } finally {
+                hideTypingIndicator();
+                userInput.disabled = false;
+                sendBtn.disabled = false;
+                userInput.focus();
+                resetConversation();
+            }
+        }
+
+        function getText(key, ...args) {
+            const langPack = languages[conversationState.language] || languages.en;
+            const textOrFunc = langPack[key] || languages.en[key];
+            return typeof textOrFunc === 'function' ? textOrFunc(...args) : textOrFunc;
+        }
+
+        function speakMessage(text) {
+            if ('speechSynthesis' in window) {
+                const strippedText = text.replace(/<[^>]*>?/gm, '');
+                const utterance = new SpeechSynthesisUtterance(strippedText);
+                utterance.lang = { en: 'en-ZA', af: 'af-ZA', zu: 'zu-ZA' }[conversationState.language] || 'en-ZA';
+                speechSynthesis.cancel();
+                speechSynthesis.speak(utterance);
+            }
+        }
+
+        function addMessage(message, sender, type = 'normal') {
+            const messageContainer = document.createElement('div');
+            messageContainer.className = `flex items-start gap-2.5 ${sender === 'user' ? 'justify-end' : 'justify-start'}`;
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `max-w-xs md:max-w-md p-4 rounded-lg shadow ${sender === 'user' ? 'user-message' : 'bot-message'}`;
+            if (sender === 'bot') {
+                if (type === 'disclaimer') messageDiv.classList.add('disclaimer');
+                else if (type === 'emergency') messageDiv.classList.add('emergency');
+            }
+            messageDiv.innerHTML = message;
+            messageContainer.appendChild(messageDiv);
+            if (sender === 'bot') {
+                const speakerBtn = document.createElement('button');
+                speakerBtn.className = 'voice-btn self-center p-2';
+                speakerBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="currentColor" viewBox="0 0 16 16"><path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/><path d="M6.271 5.055a.5.5 0 0 1 .52.038l3.5 2.5a.5.5 0 0 1 0 .814l-3.5 2.5A.5.5 0 0 1 6 10.5v-5a.5.5 0 0 1 .271-.445z"/></svg>`;
+                speakerBtn.onclick = () => speakMessage(message);
+                messageContainer.appendChild(speakerBtn);
+            }
+            chatMessages.appendChild(messageContainer);
+            messageContainer.scrollIntoView({ behavior: "smooth", block: "end" });
+        }
+
+        function showTypingIndicator() {
+            const typingDiv = document.createElement('div');
+            typingDiv.id = 'typing-indicator';
+            typingDiv.className = 'bot-message typing-indicator';
+            typingDiv.innerHTML = '<span></span><span></span><span></span>';
+            chatMessages.appendChild(typingDiv);
+            typingDiv.scrollIntoView({ behavior: "smooth", block: "end" });
+        }
+
+        function hideTypingIndicator() {
+            const indicator = document.getElementById('typing-indicator');
+            if (indicator) indicator.remove();
+        }
+
+        function showQuickReplies(replies) {
+            quickRepliesContainer.innerHTML = '';
+            replies.forEach(reply => {
+                const button = document.createElement('button');
+                button.textContent = reply;
+                button.className = 'quick-reply-btn px-4 py-2 rounded-full text-sm font-medium';
+                button.onclick = () => {
+                    userInput.value = reply;
+                    handleUserInput();
+                };
+                quickRepliesContainer.appendChild(button);
+            });
+        }
+        
+        function resetConversation() {
+            conversationState.intent = null;
+            conversationState.step = 0;
+            conversationState.data = {};
+            showQuickReplies([ getText('scheduleAppointment'), getText('refillPrescription'), getText('generalInfo'), getText('homeCareInfo'), getText('emergencyServices') ]);
+        }
+
+        function handleUserInput() {
+            const text = userInput.value.trim();
+            if (!text) return;
+            addMessage(userInput.value, 'user');
+            userInput.value = '';
+            quickRepliesContainer.innerHTML = '';
+            userInput.disabled = true;
+            sendBtn.disabled = true;
+            showTypingIndicator();
+            
+            if (!conversationState.language) {
+                setTimeout(() => {
+                    selectLanguage(text);
+                    hideTypingIndicator();
+                    userInput.disabled = false;
+                    sendBtn.disabled = false;
+                    userInput.focus();
+                }, 500);
+                return;
+            }
+
+            const lowerText = text.toLowerCase();
+            if (checkForEmergency(lowerText)) {
+                setTimeout(() => {
+                    triggerEmergencyProtocol();
+                    hideTypingIndicator();
+                    userInput.disabled = false;
+                    sendBtn.disabled = false;
+                    userInput.focus();
+                }, 500);
+                return;
+            }
+
+            if (checkForMedicalAdvice(lowerText)) {
+                setTimeout(() => {
+                    addMessage(getText('noMedicalAdvice'), 'bot', 'disclaimer');
+                    resetConversation();
+                    hideTypingIndicator();
+                    userInput.disabled = false;
+                    sendBtn.disabled = false;
+                    userInput.focus();
+                }, 500);
+                return;
+            }
+
+            if (conversationState.intent) {
+                setTimeout(() => {
+                    continueConversation(text);
+                    hideTypingIndicator();
+                    userInput.disabled = false;
+                    sendBtn.disabled = false;
+                    userInput.focus();
+                }, 500);
+            } else {
+                determineIntent(text);
+            }
+        }
+
+        function determineIntent(text) {
+            const lowerText = text.toLowerCase();
+            if (conversationState.lastIntent && ["what about", "how about", "and for", "and"].some(kw => lowerText.startsWith(kw))) {
+                 handleFollowUp(lowerText);
+                 return;
+            }
+            const intents = findBestIntents(lowerText);
+            if (intents.length > 0) {
+                intents.forEach((intent, index) => setTimeout(() => handleIntent(intent.name), index * 1000));
+                setTimeout(() => {
+                    hideTypingIndicator();
+                    userInput.disabled = false;
+                    sendBtn.disabled = false;
+                    userInput.focus();
+                }, intents.length * 1000);
+            } else {
+                getAiResponse(text);
+            }
+        }
+
+        function handleIntent(intentName) {
+            conversationState.lastIntent = intentName;
+            const intentActions = {
+                scheduleAppointment: startAppointmentFlow,
+                refillPrescription: startRefillFlow,
+                generalInfo: handleGeneralInfo,
+                homeCareInfo: startHomeCareFlow,
+                emergencyServices: startEmergencyFlow,
+                departments: startDepartmentsFlow,
+                mainMenu: () => { addMessage(getText('howCanIHelp'), 'bot'); resetConversation(); },
+                greeting: () => { addMessage(getText('howCanIHelp'), 'bot'); resetConversation(); }
+            };
+            if (intentActions[intentName]) {
+                intentActions[intentName]();
+            } else {
+                const topics = getText('generalConversationData');
+                if (topics[intentName]) {
+                    addMessage(topics[intentName].response, 'bot');
+                    setTimeout(() => { addMessage(getText('howCanIHelp'), 'bot'); resetConversation(); }, 1000);
+                }
+            }
+        }
+        
+        function handleFollowUp(text) {
+            const topics = getText('generalConversationData');
+            const topic = topics[conversationState.lastIntent];
+            if (topic) {
+                addMessage(topic.response, 'bot');
+                 setTimeout(() => { addMessage(getText('howCanIHelp'), 'bot'); resetConversation(); }, 1000);
+            } else {
+                determineIntent(text);
+            }
+        }
+
+        function startAppointmentFlow() {
+            conversationState.intent = 'scheduleAppointment';
+            conversationState.step = 1;
+            addMessage(getText('startAppointment'), 'bot');
+        }
+        
+        function startRefillFlow() {
+            conversationState.intent = 'requestRefill';
+            conversationState.step = 1;
+            addMessage(getText('startRefill'), 'bot');
+        }
+
+        function startDepartmentsFlow() {
+            conversationState.intent = 'selectDepartment';
+            const depts = getText('departmentsData');
+            let departmentMessage = getText('departmentIntro') + '<ul>' + Object.entries(depts).map(([dept, desc]) => `<li><b>${dept}:</b> ${desc}</li>`).join('') + '</ul>';
+            addMessage(departmentMessage, 'bot');
+            showQuickReplies(Object.keys(depts));
+        }
+
+        function startHomeCareFlow(userText = "") {
+            conversationState.intent = 'homeCare';
+            addMessage(getText('homeCareDisclaimer'), 'bot', 'disclaimer');
+            const matchedTopic = findHomeCareTopic(userText);
+            if (matchedTopic) {
+                handleHomeCareSelection(matchedTopic);
+            } else {
+                addMessage(getText('homeCarePrompt'), 'bot');
+                showQuickReplies([...Object.keys(getText('homeCareData')), getText('mainMenu')]);
+            }
+        }
+
+        function startEmergencyFlow() {
+            conversationState.intent = 'emergency';
+            addMessage(getText('emergencyDisclaimer'), 'bot', 'emergency');
+            showQuickReplies([ getText('ambulance'), getText('police'), getText('fireDepartment'), getText('traumaUnits'), getText('mainMenu') ]);
+        }
+
+        function continueConversation(text) {
+            const flows = {
+                scheduleAppointment: () => handleAppointmentScheduling(text, conversationState.step),
+                requestRefill: () => handleRefillRequest(text, conversationState.step),
+                selectDepartment: () => handleDepartmentSelection(text),
+                homeCare: () => handleHomeCareSelection(text),
+                emergency: () => handleEmergencySelection(text),
+                preVisitChecklist: () => {
+                    const lowerText = text.toLowerCase();
+                    const yesReplies = [getText('yesPlease').toLowerCase(), 'yes', 'ja', 'yebo'];
+                    if (yesReplies.some(reply => lowerText.includes(reply))) {
+                        addMessage(getText('preVisitChecklist'), 'bot');
+                    }
+                    resetConversation();
+                }
+            };
+            if (flows[conversationState.intent]) flows[conversationState.intent]();
+        }
+        
+        function handleAppointmentScheduling(text, step) {
+            const steps = [
+                () => { conversationState.data.name = text; addMessage(getText('askReason'), 'bot'); },
+                () => { conversationState.data.reason = text; addMessage(getText('askDateTime'), 'bot'); },
+                () => { conversationState.data.dateTime = text; addMessage(getText('askContact'), 'bot'); },
+                () => { conversationState.data.contact = text; addMessage(getText('askMedicalAid'), 'bot'); },
+                () => {
+                    conversationState.data.medicalAid = text;
+                    addMessage(getText('confirmAppointment', conversationState.data), 'bot');
+                    saveAppointmentToDatabase(conversationState.data);
+                    console.log("Appointment Request Saved:", conversationState.data);
+                    setTimeout(() => {
+                        conversationState.intent = 'preVisitChecklist';
+                        addMessage(getText('preVisitPrompt'), 'bot');
+                        showQuickReplies([getText('yesPlease'), getText('noThanks')]);
+                    }, 1000);
+                }
+            ];
+            if (steps[step - 1]) {
+                steps[step - 1]();
+                conversationState.step++;
+            }
+        }
+        
+        function handleRefillRequest(text, step) {
+             const steps = [
+                () => { conversationState.data.medication = text; addMessage(getText('askDosage'), 'bot'); },
+                () => { conversationState.data.dosage = text; addMessage(getText('askPatientName'), 'bot'); },
+                () => { conversationState.data.patientId = text; addMessage(getText('askRefillContact'), 'bot'); },
+                () => { conversationState.data.contact = text; addMessage(getText('askPickup'), 'bot'); showQuickReplies(hospitalData.hospitals); },
+                () => {
+                    conversationState.data.pickupLocation = text;
+                    addMessage(getText('confirmRefill', conversationState.data), 'bot');
+                    saveRefillToDatabase(conversationState.data);
+                    console.log("Refill Request Saved:", conversationState.data);
+                    resetConversation();
+                }
+            ];
+            if (steps[step - 1]) {
+                steps[step - 1]();
+                conversationState.step++;
+            }
+        }
+        
+        function handleDepartmentSelection(text) {
+            const depts = getText('departmentsData');
+            const selectedDeptKey = Object.keys(depts).find(dept => text.toLowerCase().includes(dept.toLowerCase()));
+            addMessage(selectedDeptKey ? getText('departmentSelected', selectedDeptKey) : getText('misunderstood'), 'bot');
+            resetConversation();
+        }
+
+        function handleHomeCareSelection(text) {
+            if (text.toLowerCase() === getText('mainMenu').toLowerCase()) {
+                addMessage(getText('howCanIHelp'), 'bot');
+                resetConversation();
+                return;
+            }
+            const matchedTopicKey = findHomeCareTopic(text);
+            if (matchedTopicKey) {
+                const topicInfo = getText('homeCareData')[matchedTopicKey];
+                addMessage(`${topicInfo.symptoms}<br><br>${topicInfo.homeCare}<br><br>${topicInfo.whenToSeeDoctor}`, 'bot');
+                addMessage(getText('homeCareFollowUp'), 'bot');
+            } else {
+                addMessage(getText('homeCareFallback'), 'bot');
+            }
+            showQuickReplies([...Object.keys(getText('homeCareData')), getText('mainMenu')]);
+        }
+
+        function handleEmergencySelection(text) {
+            const lowerText = text.toLowerCase();
+            const emergencyActions = {
+                [getText('ambulance').toLowerCase()]: getText('ambulanceInfo'),
+                [getText('police').toLowerCase()]: getText('policeInfo'),
+                [getText('fireDepartment').toLowerCase()]: getText('fireInfo'),
+                [getText('traumaUnits').toLowerCase()]: getText('traumaInfo')
+            };
+            const actionKey = Object.keys(emergencyActions).find(key => lowerText.includes(key));
+            addMessage(actionKey ? emergencyActions[actionKey] : getText('misunderstood'), 'bot');
+            resetConversation();
+        }
+
+        function handleGeneralInfo() {
+            addMessage(getText('generalInfoPrompt'), 'bot');
+            showQuickReplies([ getText('visitingHours'), getText('contactInfo'), getText('location'), getText('departments'), getText('mainMenu') ]);
+        }
+        
+        function findBestIntents(text) {
+            const allIntents = { ...getText('generalConversationData'), scheduleAppointment: { keywords: [getText('scheduleAppointment').toLowerCase(), 'book', 'see a doctor'] }, refillPrescription: { keywords: [getText('refillPrescription').toLowerCase(), 'renew', 'script'] }, generalInfo: { keywords: [getText('generalInfo').toLowerCase()] }, homeCareInfo: { keywords: [getText('homeCareInfo').toLowerCase()] }, emergencyServices: { keywords: [getText('emergencyServices').toLowerCase()] }, departments: { keywords: [getText('departments').toLowerCase()] }, mainMenu: { keywords: [getText('mainMenu').toLowerCase()] }, greeting: { keywords: ['hi', 'hello', 'sawubona', 'hallo'] } };
+            return Object.entries(allIntents)
+                .map(([name, { keywords }]) => ({ name, score: keywords.filter(kw => text.includes(kw)).length }))
+                .filter(({ score }) => score > 0)
+                .sort((a, b) => b.score - a.score);
+        }
+
+        function findHomeCareTopic(text) {
+            const homeCareTopics = getText('homeCareData');
+            const lowerText = text.toLowerCase();
+            for (const topic in homeCareTopics) {
+                if (lowerText.includes(topic.toLowerCase()) || homeCareTopics[topic].keywords.some(kw => lowerText.includes(kw))) {
+                    return topic;
+                }
+            }
+            return null;
+        }
+
+        function checkForEmergency(text) {
+            return ['emergency', 'urgent', 'chest pain', 'can\'t breathe', 'stroke', 'bleeding', 'severe pain', 'noodgeval', 'dringend', 'borspyn', 'isimo esiphuthumayo', 'phuthumayo'].some(kw => text.includes(kw));
+        }
+
+        function triggerEmergencyProtocol() {
+            const emergencyLocationInfo = getText('generalConversationData').location.response;
+            addMessage(getText('emergency', emergencyLocationInfo), 'bot', 'emergency');
+            resetConversation();
+        }
+        
+        function checkForMedicalAdvice(text) {
+            return ['diagnose', 'symptoms', 'should i take', 'treatment', 'diagnoseer', 'simptome', 'behandeling', 'izimpawu', 'ukwelashwa'].some(kw => text.includes(kw));
+        }
+
+        function restartChat() {
+            chatMessages.innerHTML = '';
+            conversationState = { intent: null, step: 0, data: {}, language: null, lastIntent: null };
+            chatbotTitle.textContent = "Tony Chatbot";
+            speechSynthesis.cancel();
+            startChat();
+        }
+
+        function selectLanguage(text) {
+            const lowerText = text.toLowerCase();
+            if (lowerText.includes('english')) conversationState.language = 'en';
+            else if (lowerText.includes('afrikaans')) conversationState.language = 'af';
+            else if (lowerText.includes('isizulu')) conversationState.language = 'zu';
+            
+            if (conversationState.language) {
+                chatbotTitle.textContent = getText('chatbotName');
+                addMessage(getText('greeting'), 'bot');
+                addMessage(getText('disclaimer'), 'bot', 'disclaimer');
+                addMessage(getText('howCanIHelp'), 'bot');
+                resetConversation();
+            } else {
+                addMessage(getText('chooseLanguagePrompt'), 'bot');
+                showQuickReplies(['English', 'Afrikaans', 'isiZulu']);
+            }
+        }
+
+        function startChat() {
+            addMessage("Please select your language. / Kies asseblief jou taal. / Sicela ukhethe ulimi lwakho.", 'bot');
+            showQuickReplies(['English', 'Afrikaans', 'isiZulu']);
+        }
+
+        sendBtn.addEventListener('click', handleUserInput);
+        restartBtn.addEventListener('click', restartChat);
+        userInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') handleUserInput(); });
+
+        if (recognition) {
+            micBtn.addEventListener('click', () => {
+                if (!conversationState.language) { 
+                    addMessage("Please select your language. / Kies asseblief jou taal. / Sicela ukhethe ulimi lwakho.", 'bot');
+                    return; 
+                }
+                micBtn.classList.add('listening');
+                recognition.lang = { en: 'en-ZA', af: 'af-ZA', zu: 'zu-ZA' }[conversationState.language];
+                recognition.start();
+            });
+            recognition.onresult = (event) => { userInput.value = event.results[0][0].transcript; handleUserInput(); };
+            recognition.onend = () => micBtn.classList.remove('listening');
+            recognition.onerror = (event) => { console.error("Speech recognition error", event.error); micBtn.classList.remove('listening'); };
+        } else {
+            micBtn.style.display = 'none';
+        }
+
+        let currentTextSize = 16;
+        function updateTextSize(newSize) {
+            currentTextSize = Math.max(12, Math.min(newSize, 24));
+            document.documentElement.style.fontSize = `${currentTextSize}px`;
+        }
+        increaseTextBtn.addEventListener('click', () => updateTextSize(currentTextSize + 2));
+        decreaseTextBtn.addEventListener('click', () => updateTextSize(currentTextSize - 2));
+
+        startChat();
+    </script>
+</body>
+</html>
